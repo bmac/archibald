@@ -12,7 +12,7 @@ pub mod executor;
 // Re-export main types
 pub use error::{Error, Result};
 pub use operator::{Operator, IntoOperator, op};
-pub use builder::{QueryBuilder, SelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder, JoinType, SortDirection, ColumnSelector, AggregateFunction};
+pub use builder::{QueryBuilder, SelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder, JoinType, SortDirection, ColumnSelector, AggregateFunction, Subquery};
 pub use value::Value;
 pub use executor::{ConnectionPool, ExecutableQuery, ExecutableModification};
 

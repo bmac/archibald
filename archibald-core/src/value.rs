@@ -25,6 +25,8 @@ pub enum Value {
     Json(serde_json::Value),
     /// Array of values
     Array(Vec<Value>),
+    /// Subquery placeholder (actual subquery stored separately)
+    SubqueryPlaceholder,
 }
 
 impl Value {
@@ -46,6 +48,7 @@ impl Value {
             Value::Bytes(_) => "BYTEA",
             Value::Json(_) => "JSON",
             Value::Array(_) => "ARRAY",
+            Value::SubqueryPlaceholder => "SUBQUERY",
         }
     }
 }

@@ -4,21 +4,28 @@ use std::fmt::{self, Display};
 
 /// Type-safe SQL operator
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Operator(&'static str);
+pub enum Operator {
+    /// Known valid operator
+    Known(&'static str),
+    /// Unknown operator (validated at to_sql() time)
+    Unknown(String),
+}
 
 impl Operator {
-    pub const GT: Self = Operator(">");
-    pub const LT: Self = Operator("<");
-    pub const EQ: Self = Operator("=");
-    pub const NEQ: Self = Operator("!=");
-    pub const GTE: Self = Operator(">=");
-    pub const LTE: Self = Operator("<=");
-    pub const LIKE: Self = Operator("LIKE");
-    pub const ILIKE: Self = Operator("ILIKE");
-    pub const IN: Self = Operator("IN");
-    pub const NOT_IN: Self = Operator("NOT IN");
-    pub const IS_NULL: Self = Operator("IS NULL");
-    pub const IS_NOT_NULL: Self = Operator("IS NOT NULL");
+    pub const GT: Self = Operator::Known(">");
+    pub const LT: Self = Operator::Known("<");
+    pub const EQ: Self = Operator::Known("=");
+    pub const NEQ: Self = Operator::Known("!=");
+    pub const GTE: Self = Operator::Known(">=");
+    pub const LTE: Self = Operator::Known("<=");
+    pub const LIKE: Self = Operator::Known("LIKE");
+    pub const ILIKE: Self = Operator::Known("ILIKE");
+    pub const IN: Self = Operator::Known("IN");
+    pub const NOT_IN: Self = Operator::Known("NOT IN");
+    pub const IS_NULL: Self = Operator::Known("IS NULL");
+    pub const IS_NOT_NULL: Self = Operator::Known("IS NOT NULL");
+    pub const EXISTS: Self = Operator::Known("EXISTS");
+    pub const NOT_EXISTS: Self = Operator::Known("NOT EXISTS");
     
     /// Create a custom operator for database-specific operations
     /// 
@@ -33,18 +40,36 @@ impl Operator {
     /// let distance_op = Operator::custom("<->");
     /// ```
     pub const fn custom(op: &'static str) -> Self {
-        Operator(op)
+        Operator::Known(op)
     }
     
     /// Get the string representation of the operator
     pub fn as_str(&self) -> &str {
-        self.0
+        match self {
+            Operator::Known(op) => op,
+            Operator::Unknown(op) => op,
+        }
+    }
+    
+    /// Validate that this operator is recognized (used at to_sql() time)
+    pub fn validate(&self) -> crate::Result<()> {
+        match self {
+            Operator::Known(_) => Ok(()),
+            Operator::Unknown(op) => {
+                Err(crate::Error::invalid_query(format!(
+                    "Unknown operator '{}'. Use Operator::{} constants or Operator::custom(\"{}\") for custom operators.", 
+                    op,
+                    op.to_uppercase().replace(" ", "_").replace("!", "N"), 
+                    op
+                )))
+            }
+        }
     }
 }
 
 impl Display for Operator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.as_str())
     }
 }
 
@@ -59,7 +84,7 @@ impl IntoOperator for Operator {
     }
 }
 
-/// Allow string literals for common SQL operators with validation
+/// Allow string literals for common SQL operators (validation deferred to to_sql())
 impl IntoOperator for &str {
     fn into_operator(self) -> Operator {
         match self {
@@ -75,12 +100,10 @@ impl IntoOperator for &str {
             "NOT IN" | "not in" => Operator::NOT_IN,
             "IS NULL" | "is null" => Operator::IS_NULL,
             "IS NOT NULL" | "is not null" => Operator::IS_NOT_NULL,
-            _ => panic!(
-                "Unknown operator '{}'. Use Operator::{} constants or Operator::custom(\"{}\") for custom operators.", 
-                self, 
-                self.to_uppercase().replace(" ", "_").replace("!", "N"), 
-                self
-            ),
+            "EXISTS" | "exists" => Operator::EXISTS,
+            "NOT EXISTS" | "not exists" => Operator::NOT_EXISTS,
+            // Store unknown operators as-is, validate later
+            _ => Operator::Unknown(self.to_string()),
         }
     }
 }
@@ -101,6 +124,8 @@ pub mod op {
     pub const NOT_IN: Operator = Operator::NOT_IN;
     pub const IS_NULL: Operator = Operator::IS_NULL;
     pub const IS_NOT_NULL: Operator = Operator::IS_NOT_NULL;
+    pub const EXISTS: Operator = Operator::EXISTS;
+    pub const NOT_EXISTS: Operator = Operator::NOT_EXISTS;
 }
 
 #[cfg(test)]
@@ -136,9 +161,12 @@ mod tests {
     }
     
     #[test]
-    #[should_panic(expected = "Unknown operator 'INVALID'")]
     fn test_invalid_string_conversion() {
-        "INVALID".into_operator();
+        let invalid_op = "INVALID".into_operator();
+        assert_eq!(invalid_op, Operator::Unknown("INVALID".to_string()));
+        
+        // Test that validation fails
+        assert!(invalid_op.validate().is_err());
     }
     
     #[test]
@@ -152,5 +180,19 @@ mod tests {
         assert_eq!("IS NULL".into_operator(), Operator::IS_NULL);
         assert_eq!("is null".into_operator(), Operator::IS_NULL);
         assert_eq!("IS NOT NULL".into_operator(), Operator::IS_NOT_NULL);
+    }
+    
+    #[test]
+    fn test_deferred_validation_in_query() {
+        use crate::{table, builder::QueryBuilder};
+        
+        // Creating a query with invalid operator should not panic
+        let query = table("users").where_(("age", "INVALID_OP", 18));
+        
+        // But generating SQL should fail
+        assert!(query.to_sql().is_err());
+        
+        let err = query.to_sql().unwrap_err();
+        assert!(err.to_string().contains("Unknown operator 'INVALID_OP'"));
     }
 }

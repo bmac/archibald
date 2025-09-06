@@ -83,7 +83,7 @@ impl std::fmt::Display for AggregateFunction {
 }
 
 /// Column selector that can be a regular column or an aggregation
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum ColumnSelector {
     Column(String),
     Aggregate {
@@ -92,6 +92,10 @@ pub enum ColumnSelector {
         alias: Option<String>,
     },
     CountAll {
+        alias: Option<String>,
+    },
+    SubqueryColumn {
+        subquery: Subquery,
         alias: Option<String>,
     },
 }
@@ -179,10 +183,14 @@ impl ColumnSelector {
                 *a = Some(alias.to_string());
                 self
             }
+            Self::SubqueryColumn { alias: a, .. } => {
+                *a = Some(alias.to_string());
+                self
+            }
         }
     }
     
-    /// Convert to SQL string
+    /// Convert to SQL string (validation happens at outer to_sql() level)
     pub fn to_sql(&self) -> String {
         match self {
             Self::Column(name) => name.clone(),
@@ -210,6 +218,76 @@ impl ColumnSelector {
                     sql
                 }
             }
+            Self::SubqueryColumn { subquery, alias } => {
+                // Defer validation - just generate SQL assuming subquery is valid
+                let subquery_sql = subquery.to_sql().unwrap_or_else(|_| "INVALID_SUBQUERY".to_string());
+                if let Some(alias) = alias {
+                    format!("{} AS {}", subquery_sql, alias)
+                } else {
+                    subquery_sql
+                }
+            }
+        }
+    }
+}
+
+/// Subquery wrapper for use in various SQL contexts
+#[derive(Debug, Clone)]
+pub struct Subquery {
+    pub query: Box<SelectBuilder>,
+    pub alias: Option<String>,
+}
+
+impl Subquery {
+    /// Create a new subquery from a SelectBuilder
+    pub fn new(query: SelectBuilder) -> Self {
+        Self {
+            query: Box::new(query),
+            alias: None,
+        }
+    }
+    
+    /// Create a subquery with an alias (required for FROM/JOIN subqueries)
+    pub fn with_alias(query: SelectBuilder, alias: &str) -> Self {
+        Self {
+            query: Box::new(query),
+            alias: Some(alias.to_string()),
+        }
+    }
+    
+    /// Convert to SQL string
+    pub fn to_sql(&self) -> Result<String> {
+        let inner_sql = self.query.to_sql()?;
+        let subquery_sql = format!("({})", inner_sql);
+        
+        if let Some(alias) = &self.alias {
+            Ok(format!("{} AS {}", subquery_sql, alias))
+        } else {
+            Ok(subquery_sql)
+        }
+    }
+    
+    /// Get parameters from the subquery
+    pub fn parameters(&self) -> &[Value] {
+        self.query.parameters()
+    }
+}
+
+/// Subquery column selector for SELECT clauses
+impl ColumnSelector {
+    /// Create a subquery column selector
+    pub fn subquery(query: SelectBuilder) -> Self {
+        Self::SubqueryColumn {
+            subquery: Subquery::new(query),
+            alias: None,
+        }
+    }
+    
+    /// Create a subquery column selector with alias
+    pub fn subquery_as(query: SelectBuilder, alias: &str) -> Self {
+        Self::SubqueryColumn {
+            subquery: Subquery::new(query),
+            alias: Some(alias.to_string()),
         }
     }
 }
@@ -298,12 +376,22 @@ pub struct HavingCondition {
     pub connector: WhereConnector,
 }
 
+/// Subquery condition for WHERE clauses
+#[derive(Debug, Clone)]
+pub struct SubqueryCondition {
+    pub column: String,
+    pub operator: Operator,
+    pub subquery: Subquery,
+    pub connector: WhereConnector,
+}
+
 /// SELECT query builder
 #[derive(Debug, Clone)]
 pub struct SelectBuilder {
     table_name: String,
     selected_columns: Vec<ColumnSelector>,
     where_conditions: Vec<WhereCondition>,
+    subquery_conditions: Vec<SubqueryCondition>,
     join_clauses: Vec<JoinClause>,
     order_by_clauses: Vec<OrderByClause>,
     group_by_clause: Option<GroupByClause>,
@@ -321,6 +409,7 @@ impl SelectBuilder {
             table_name: table.to_string(),
             selected_columns: vec![ColumnSelector::Column("*".to_string())],
             where_conditions: Vec::new(),
+            subquery_conditions: Vec::new(),
             join_clauses: Vec::new(),
             order_by_clauses: Vec::new(),
             group_by_clause: None,
@@ -660,10 +749,87 @@ impl SelectBuilder {
         self.parameters.push(self.having_conditions.last().unwrap().value.clone());
         self
     }
+    
+    /// Add WHERE condition with IN subquery
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::table;
+    /// 
+    /// let subquery = table("orders").select("customer_id").where_(("status", "active"));
+    /// let query = table("customers").where_in("id", subquery);
+    /// ```
+    pub fn where_in(mut self, column: &str, subquery: SelectBuilder) -> Self {
+        let subquery_wrapper = Subquery::new(subquery);
+        self.subquery_conditions.push(SubqueryCondition {
+            column: column.to_string(),
+            operator: Operator::IN,
+            subquery: subquery_wrapper,
+            connector: WhereConnector::And,
+        });
+        self
+    }
+    
+    /// Add WHERE condition with NOT IN subquery
+    pub fn where_not_in(mut self, column: &str, subquery: SelectBuilder) -> Self {
+        let subquery_wrapper = Subquery::new(subquery);
+        self.subquery_conditions.push(SubqueryCondition {
+            column: column.to_string(),
+            operator: Operator::NOT_IN,
+            subquery: subquery_wrapper,
+            connector: WhereConnector::And,
+        });
+        self
+    }
+    
+    /// Add WHERE EXISTS subquery condition
+    pub fn where_exists(mut self, subquery: SelectBuilder) -> Self {
+        let subquery_wrapper = Subquery::new(subquery);
+        self.subquery_conditions.push(SubqueryCondition {
+            column: "".to_string(), // EXISTS doesn't need a column
+            operator: Operator::EXISTS,
+            subquery: subquery_wrapper,
+            connector: WhereConnector::And,
+        });
+        self
+    }
+    
+    /// Add WHERE NOT EXISTS subquery condition
+    pub fn where_not_exists(mut self, subquery: SelectBuilder) -> Self {
+        let subquery_wrapper = Subquery::new(subquery);
+        self.subquery_conditions.push(SubqueryCondition {
+            column: "".to_string(), // NOT EXISTS doesn't need a column
+            operator: Operator::NOT_EXISTS,
+            subquery: subquery_wrapper,
+            connector: WhereConnector::And,
+        });
+        self
+    }
 }
 
 impl QueryBuilder for SelectBuilder {
     fn to_sql(&self) -> Result<String> {
+        // Validate all operators before generating SQL
+        for condition in &self.where_conditions {
+            condition.operator.validate()?;
+        }
+        
+        for condition in &self.having_conditions {
+            condition.operator.validate()?;
+        }
+        
+        for condition in &self.subquery_conditions {
+            condition.operator.validate()?;
+            // Validate subquery recursively
+            condition.subquery.query.to_sql()?;
+        }
+        
+        for join_clause in &self.join_clauses {
+            for condition in &join_clause.on_conditions {
+                condition.operator.validate()?;
+            }
+        }
+        
         let mut sql = String::new();
         
         // SELECT clause
@@ -736,6 +902,41 @@ impl QueryBuilder for SelectBuilder {
                     sql.push(')');
                 } else {
                     sql.push_str(" ?");
+                }
+            }
+        }
+        
+        // Add subquery conditions to WHERE clause
+        let has_regular_where = !self.where_conditions.is_empty();
+        if !self.subquery_conditions.is_empty() {
+            if !has_regular_where {
+                sql.push_str(" WHERE ");
+            }
+            
+            for (i, condition) in self.subquery_conditions.iter().enumerate() {
+                if has_regular_where || i > 0 {
+                    match condition.connector {
+                        WhereConnector::And => sql.push_str(" AND "),
+                        WhereConnector::Or => sql.push_str(" OR "),
+                    }
+                }
+                
+                match condition.operator {
+                    Operator::EXISTS => {
+                        sql.push_str("EXISTS ");
+                        sql.push_str(&condition.subquery.to_sql()?);
+                    }
+                    Operator::NOT_EXISTS => {
+                        sql.push_str("NOT EXISTS ");
+                        sql.push_str(&condition.subquery.to_sql()?);
+                    }
+                    _ => {
+                        sql.push_str(&condition.column);
+                        sql.push(' ');
+                        sql.push_str(condition.operator.as_str());
+                        sql.push(' ');
+                        sql.push_str(&condition.subquery.to_sql()?);
+                    }
                 }
             }
         }
@@ -1122,6 +1323,11 @@ impl QueryBuilder for UpdateBuilder {
             return Err(crate::Error::invalid_query("UPDATE requires SET clauses"));
         }
         
+        // Validate all operators before generating SQL
+        for condition in &self.where_conditions {
+            condition.operator.validate()?;
+        }
+        
         let mut sql = String::new();
         
         // UPDATE clause
@@ -1230,6 +1436,11 @@ impl DeleteBuilder {
 
 impl QueryBuilder for DeleteBuilder {
     fn to_sql(&self) -> Result<String> {
+        // Validate all operators before generating SQL
+        for condition in &self.where_conditions {
+            condition.operator.validate()?;
+        }
+        
         let mut sql = String::new();
         
         // DELETE FROM clause
@@ -2142,5 +2353,154 @@ mod tests {
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT region, COUNT(DISTINCT customer_id) AS unique_customers, SUM(total) AS total_sales FROM orders GROUP BY region HAVING COUNT(DISTINCT customer_id) > ?");
+    }
+    
+    // Subquery tests
+    #[test]
+    fn test_subquery_in_select() {
+        let subquery = SelectBuilder::new("orders")
+            .select("total")
+            .where_(("customer_id", 1))
+            .limit(1);
+        
+        let query = SelectBuilder::new("customers")
+            .select(vec![
+                ColumnSelector::Column("name".to_string()),
+                ColumnSelector::subquery_as(subquery, "latest_order_total")
+            ]);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT name, (SELECT total FROM orders WHERE customer_id = ? LIMIT 1) AS latest_order_total FROM customers");
+    }
+    
+    #[test]
+    fn test_where_in_subquery() {
+        let subquery = SelectBuilder::new("orders")
+            .select("customer_id")
+            .where_(("status", "completed"));
+            
+        let query = SelectBuilder::new("customers")
+            .where_in("id", subquery);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE status = ?)");
+    }
+    
+    #[test]
+    fn test_where_not_in_subquery() {
+        let subquery = SelectBuilder::new("cancelled_orders")
+            .select("customer_id");
+            
+        let query = SelectBuilder::new("customers")
+            .where_not_in("id", subquery);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE id NOT IN (SELECT customer_id FROM cancelled_orders)");
+    }
+    
+    #[test]
+    fn test_where_exists_subquery() {
+        let subquery = SelectBuilder::new("orders")
+            .select("1")
+            .where_(("orders.customer_id = customers.id", ""));
+            
+        let query = SelectBuilder::new("customers")
+            .where_exists(subquery);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customers.id = ?)");
+    }
+    
+    #[test]
+    fn test_where_not_exists_subquery() {
+        let subquery = SelectBuilder::new("orders")
+            .select("1")
+            .where_(("orders.customer_id = customers.id", ""));
+            
+        let query = SelectBuilder::new("customers")
+            .where_not_exists(subquery);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customers.id = ?)");
+    }
+    
+    #[test]
+    fn test_mixed_where_and_subquery_conditions() {
+        let subquery = SelectBuilder::new("orders")
+            .select("customer_id")
+            .where_(("total", op::GT, 100));
+            
+        let query = SelectBuilder::new("customers")
+            .where_(("active", true))
+            .where_in("id", subquery);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE active = ? AND id IN (SELECT customer_id FROM orders WHERE total > ?)");
+    }
+    
+    #[test]
+    fn test_nested_subqueries() {
+        let inner_subquery = SelectBuilder::new("order_items")
+            .select("order_id")
+            .where_(("product_id", 1));
+            
+        let outer_subquery = SelectBuilder::new("orders")
+            .select("customer_id")
+            .where_in("id", inner_subquery);
+            
+        let query = SelectBuilder::new("customers")
+            .where_in("id", outer_subquery);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE id IN (SELECT order_id FROM order_items WHERE product_id = ?))");
+    }
+    
+    #[test]
+    fn test_subquery_with_aggregation() {
+        let avg_subquery = SelectBuilder::new("orders")
+            .select(ColumnSelector::avg("total").as_alias("avg_total"));
+            
+        let query = SelectBuilder::new("customers")
+            .select(vec![
+                ColumnSelector::Column("name".to_string()),
+                ColumnSelector::subquery_as(avg_subquery, "avg_order_total")
+            ]);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT name, (SELECT AVG(total) AS avg_total FROM orders) AS avg_order_total FROM customers");
+    }
+    
+    #[test]
+    fn test_complex_subquery_with_joins() {
+        let subquery = SelectBuilder::new("orders")
+            .select(ColumnSelector::sum("order_items.quantity"))
+            .inner_join("order_items", "orders.id", "order_items.order_id")
+            .where_(("orders.customer_id", 1))
+            .group_by("orders.customer_id");
+            
+        let query = SelectBuilder::new("customers")
+            .select(vec![
+                ColumnSelector::Column("name".to_string()),
+                ColumnSelector::subquery_as(subquery, "total_items_ordered")
+            ]);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT name, (SELECT SUM(order_items.quantity) FROM orders INNER JOIN order_items ON orders.id = order_items.order_id WHERE orders.customer_id = ? GROUP BY orders.customer_id) AS total_items_ordered FROM customers");
+    }
+    
+    #[test]
+    fn test_subquery_with_multiple_conditions() {
+        let subquery = SelectBuilder::new("orders")
+            .select("customer_id")
+            .where_(("status", "completed"))
+            .and_where(("total", op::GT, 50));
+            
+        let query = SelectBuilder::new("customers")
+            .select("name")
+            .where_in("id", subquery)
+            .where_(("active", true));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT name FROM customers WHERE active = ? AND id IN (SELECT customer_id FROM orders WHERE status = ? AND total > ?)");
     }
 }
