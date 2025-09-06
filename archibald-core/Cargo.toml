@@ -1,0 +1,45 @@
+[package]
+name = "archibald-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core query building logic for Archibald"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/your-username/archibald"
+
+[dependencies]
+# Core runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Serialization  
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Database foundation
+sqlx = { workspace = true, features = ["runtime-tokio", "any"] }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Optional database types
+uuid = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+rust_decimal = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+
+[features]
+default = []
+
+# Database drivers
+postgres = ["sqlx/postgres"]
+mysql = ["sqlx/mysql"] 
+sqlite = ["sqlx/sqlite"]
+# mssql = ["sqlx/mssql"]  # Not available in sqlx 0.7
+
+# Optional type support
+uuid-support = ["uuid"]
+datetime-support = ["chrono"]
+decimal-support = ["rust_decimal"]
+all-types = ["uuid-support", "datetime-support", "decimal-support"]
