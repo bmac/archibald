@@ -58,12 +58,90 @@ pub enum WhereConnector {
     Or,
 }
 
+/// JOIN clause types
+#[derive(Debug, Clone, PartialEq)]
+pub enum JoinType {
+    Inner,
+    Left,
+    Right,
+    FullOuter,
+    Cross,
+}
+
+impl std::fmt::Display for JoinType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JoinType::Inner => write!(f, "INNER JOIN"),
+            JoinType::Left => write!(f, "LEFT JOIN"),
+            JoinType::Right => write!(f, "RIGHT JOIN"),
+            JoinType::FullOuter => write!(f, "FULL OUTER JOIN"),
+            JoinType::Cross => write!(f, "CROSS JOIN"),
+        }
+    }
+}
+
+/// A JOIN clause
+#[derive(Debug, Clone, PartialEq)]
+pub struct JoinClause {
+    pub join_type: JoinType,
+    pub table: String,
+    pub on_conditions: Vec<JoinCondition>,
+}
+
+/// How JOIN conditions are connected
+#[derive(Debug, Clone, PartialEq)]
+pub enum JoinConnector {
+    And,
+    Or,
+}
+
+/// JOIN ON condition
+#[derive(Debug, Clone, PartialEq)]
+pub struct JoinCondition {
+    pub left_column: String,
+    pub operator: Operator,
+    pub right_column: String,
+    pub connector: JoinConnector,
+}
+
+/// Sort direction for ORDER BY clause
+#[derive(Debug, Clone, PartialEq)]
+pub enum SortDirection {
+    Asc,
+    Desc,
+}
+
+impl std::fmt::Display for SortDirection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SortDirection::Asc => write!(f, "ASC"),
+            SortDirection::Desc => write!(f, "DESC"),
+        }
+    }
+}
+
+/// ORDER BY clause
+#[derive(Debug, Clone, PartialEq)]
+pub struct OrderByClause {
+    pub column: String,
+    pub direction: SortDirection,
+}
+
+/// GROUP BY clause
+#[derive(Debug, Clone, PartialEq)]
+pub struct GroupByClause {
+    pub columns: Vec<String>,
+}
+
 /// SELECT query builder
 #[derive(Debug, Clone)]
 pub struct SelectBuilder {
     table_name: String,
     selected_columns: Vec<String>,
     where_conditions: Vec<WhereCondition>,
+    join_clauses: Vec<JoinClause>,
+    order_by_clauses: Vec<OrderByClause>,
+    group_by_clause: Option<GroupByClause>,
     limit_value: Option<u64>,
     offset_value: Option<u64>,
     parameters: Vec<Value>,
@@ -76,6 +154,9 @@ impl SelectBuilder {
             table_name: table.to_string(),
             selected_columns: vec!["*".to_string()],
             where_conditions: Vec::new(),
+            join_clauses: Vec::new(),
+            order_by_clauses: Vec::new(),
+            group_by_clause: None,
             limit_value: None,
             offset_value: None,
             parameters: Vec::new(),
@@ -166,6 +247,176 @@ impl SelectBuilder {
         self.offset_value = Some(offset);
         self
     }
+    
+    /// Add an INNER JOIN clause
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::table;
+    /// 
+    /// let query = table("users")
+    ///     .inner_join("posts", "users.id", "posts.user_id");
+    /// ```
+    pub fn inner_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Inner,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: Operator::EQ,
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+    
+    /// Add a LEFT JOIN clause
+    pub fn left_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Left,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: Operator::EQ,
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+    
+    /// Add a RIGHT JOIN clause
+    pub fn right_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Right,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: Operator::EQ,
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+    
+    /// Add a FULL OUTER JOIN clause
+    pub fn full_outer_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::FullOuter,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: Operator::EQ,
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+    
+    /// Add a CROSS JOIN clause
+    pub fn cross_join(mut self, table: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Cross,
+            table: table.to_string(),
+            on_conditions: Vec::new(), // CROSS JOIN has no ON conditions
+        });
+        self
+    }
+    
+    /// Generic JOIN method with custom join type and operator
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::{table, JoinType, op};
+    /// 
+    /// let query = table("users")
+    ///     .join(JoinType::Left, "profiles", "users.id", op::EQ, "profiles.user_id");
+    /// ```
+    pub fn join<O>(mut self, join_type: JoinType, table: &str, left_col: &str, operator: O, right_col: &str) -> Self
+    where
+        O: IntoOperator,
+    {
+        self.join_clauses.push(JoinClause {
+            join_type,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: operator.into_operator(),
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+    
+    /// Add ORDER BY clause with ascending sort
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::table;
+    /// 
+    /// let query = table("users").order_by("name");
+    /// ```
+    pub fn order_by(mut self, column: &str) -> Self {
+        self.order_by_clauses.push(OrderByClause {
+            column: column.to_string(),
+            direction: SortDirection::Asc,
+        });
+        self
+    }
+    
+    /// Add ORDER BY clause with descending sort
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::table;
+    /// 
+    /// let query = table("users").order_by_desc("created_at");
+    /// ```
+    pub fn order_by_desc(mut self, column: &str) -> Self {
+        self.order_by_clauses.push(OrderByClause {
+            column: column.to_string(),
+            direction: SortDirection::Desc,
+        });
+        self
+    }
+    
+    /// Add ORDER BY clause with custom direction
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::{table, SortDirection};
+    /// 
+    /// let query = table("users").order_by_with_direction("name", SortDirection::Desc);
+    /// ```
+    pub fn order_by_with_direction(mut self, column: &str, direction: SortDirection) -> Self {
+        self.order_by_clauses.push(OrderByClause {
+            column: column.to_string(),
+            direction,
+        });
+        self
+    }
+    
+    /// Add GROUP BY clause
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::table;
+    /// 
+    /// let query = table("orders").group_by(("customer_id", "status"));
+    /// ```
+    pub fn group_by<C>(mut self, columns: C) -> Self 
+    where 
+        C: IntoColumns,
+    {
+        self.group_by_clause = Some(GroupByClause {
+            columns: columns.into_columns(),
+        });
+        self
+    }
 }
 
 impl QueryBuilder for SelectBuilder {
@@ -179,6 +430,40 @@ impl QueryBuilder for SelectBuilder {
         // FROM clause
         sql.push_str(" FROM ");
         sql.push_str(&self.table_name);
+        
+        // JOIN clauses
+        for join_clause in &self.join_clauses {
+            sql.push(' ');
+            sql.push_str(match join_clause.join_type {
+                JoinType::Inner => "INNER JOIN",
+                JoinType::Left => "LEFT JOIN",
+                JoinType::Right => "RIGHT JOIN",
+                JoinType::FullOuter => "FULL OUTER JOIN",
+                JoinType::Cross => "CROSS JOIN",
+            });
+            sql.push(' ');
+            sql.push_str(&join_clause.table);
+            
+            // Add ON conditions for non-CROSS joins
+            if !matches!(join_clause.join_type, JoinType::Cross) && !join_clause.on_conditions.is_empty() {
+                sql.push_str(" ON ");
+                
+                for (i, condition) in join_clause.on_conditions.iter().enumerate() {
+                    if i > 0 {
+                        match condition.connector {
+                            JoinConnector::And => sql.push_str(" AND "),
+                            JoinConnector::Or => sql.push_str(" OR "),
+                        }
+                    }
+                    
+                    sql.push_str(&condition.left_column);
+                    sql.push(' ');
+                    sql.push_str(condition.operator.as_str());
+                    sql.push(' ');
+                    sql.push_str(&condition.right_column);
+                }
+            }
+        }
         
         // WHERE clause
         if !self.where_conditions.is_empty() {
@@ -205,6 +490,26 @@ impl QueryBuilder for SelectBuilder {
                 } else {
                     sql.push_str(" ?");
                 }
+            }
+        }
+        
+        // GROUP BY clause
+        if let Some(group_by) = &self.group_by_clause {
+            sql.push_str(" GROUP BY ");
+            sql.push_str(&group_by.columns.join(", "));
+        }
+        
+        // ORDER BY clause
+        if !self.order_by_clauses.is_empty() {
+            sql.push_str(" ORDER BY ");
+            
+            for (i, order_clause) in self.order_by_clauses.iter().enumerate() {
+                if i > 0 {
+                    sql.push_str(", ");
+                }
+                sql.push_str(&order_clause.column);
+                sql.push(' ');
+                sql.push_str(&order_clause.direction.to_string());
             }
         }
         
@@ -870,5 +1175,221 @@ mod tests {
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users WHERE age >= ? AND status = ? OR role = ? AND verified = ?");
+    }
+    
+    // JOIN operation tests
+    #[test]
+    fn test_inner_join() {
+        let query = SelectBuilder::new("users")
+            .select(("users.name", "profiles.bio"))
+            .inner_join("profiles", "users.id", "profiles.user_id");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT users.name, profiles.bio FROM users INNER JOIN profiles ON users.id = profiles.user_id");
+    }
+    
+    #[test]
+    fn test_left_join() {
+        let query = SelectBuilder::new("users")
+            .left_join("profiles", "users.id", "profiles.user_id");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users LEFT JOIN profiles ON users.id = profiles.user_id");
+    }
+    
+    #[test]
+    fn test_right_join() {
+        let query = SelectBuilder::new("users")
+            .right_join("orders", "users.id", "orders.user_id");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users RIGHT JOIN orders ON users.id = orders.user_id");
+    }
+    
+    #[test]
+    fn test_full_outer_join() {
+        let query = SelectBuilder::new("users")
+            .full_outer_join("profiles", "users.id", "profiles.user_id");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users FULL OUTER JOIN profiles ON users.id = profiles.user_id");
+    }
+    
+    #[test]
+    fn test_cross_join() {
+        let query = SelectBuilder::new("users")
+            .cross_join("categories");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users CROSS JOIN categories");
+    }
+    
+    #[test]
+    fn test_join_with_custom_operator() {
+        let query = SelectBuilder::new("users")
+            .join(JoinType::Inner, "profiles", "users.id", op::GT, "profiles.min_user_id");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id > profiles.min_user_id");
+    }
+    
+    #[test]
+    fn test_multiple_joins() {
+        let query = SelectBuilder::new("users")
+            .inner_join("profiles", "users.id", "profiles.user_id")
+            .left_join("orders", "users.id", "orders.user_id")
+            .right_join("categories", "orders.category_id", "categories.id");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id LEFT JOIN orders ON users.id = orders.user_id RIGHT JOIN categories ON orders.category_id = categories.id");
+    }
+    
+    #[test]
+    fn test_join_with_where_clause() {
+        let query = SelectBuilder::new("users")
+            .select(("users.name", "orders.total"))
+            .inner_join("orders", "users.id", "orders.user_id")
+            .where_(("users.active", true))
+            .and_where(("orders.status", "completed"));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT users.name, orders.total FROM users INNER JOIN orders ON users.id = orders.user_id WHERE users.active = ? AND orders.status = ?");
+    }
+    
+    #[test]
+    fn test_join_with_limit_offset() {
+        let query = SelectBuilder::new("users")
+            .inner_join("profiles", "users.id", "profiles.user_id")
+            .limit(10)
+            .offset(20);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id LIMIT 10 OFFSET 20");
+    }
+    
+    #[test]
+    fn test_generic_join_method() {
+        let query = SelectBuilder::new("users")
+            .join(JoinType::Inner, "profiles", "users.id", op::EQ, "profiles.user_id");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id");
+    }
+    
+    // ORDER BY and GROUP BY tests
+    #[test]
+    fn test_order_by_asc() {
+        let query = SelectBuilder::new("users")
+            .order_by("name");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC");
+    }
+    
+    #[test]
+    fn test_order_by_desc() {
+        let query = SelectBuilder::new("users")
+            .order_by_desc("created_at");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC");
+    }
+    
+    #[test]
+    fn test_order_by_with_direction() {
+        let query = SelectBuilder::new("users")
+            .order_by_with_direction("age", SortDirection::Desc);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY age DESC");
+    }
+    
+    #[test]
+    fn test_multiple_order_by() {
+        let query = SelectBuilder::new("users")
+            .order_by("name")
+            .order_by_desc("created_at")
+            .order_by("id");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC, created_at DESC, id ASC");
+    }
+    
+    #[test]
+    fn test_group_by_single_column() {
+        let query = SelectBuilder::new("orders")
+            .select("status")
+            .group_by("status");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status FROM orders GROUP BY status");
+    }
+    
+    #[test]
+    fn test_group_by_multiple_columns() {
+        let query = SelectBuilder::new("orders")
+            .select(("customer_id", "status"))
+            .group_by(("customer_id", "status"));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT customer_id, status FROM orders GROUP BY customer_id, status");
+    }
+    
+    #[test]
+    fn test_group_by_with_where() {
+        let query = SelectBuilder::new("orders")
+            .select("status")
+            .where_(("active", true))
+            .group_by("status");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status FROM orders WHERE active = ? GROUP BY status");
+    }
+    
+    #[test]
+    fn test_order_by_with_where() {
+        let query = SelectBuilder::new("users")
+            .where_(("active", true))
+            .order_by("name");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users WHERE active = ? ORDER BY name ASC");
+    }
+    
+    #[test]
+    fn test_group_by_with_order_by() {
+        let query = SelectBuilder::new("orders")
+            .select("status")
+            .group_by("status")
+            .order_by("status");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status FROM orders GROUP BY status ORDER BY status ASC");
+    }
+    
+    #[test]
+    fn test_complex_query_with_joins_group_order() {
+        let query = SelectBuilder::new("users")
+            .select(("users.name", "orders.status"))
+            .inner_join("orders", "users.id", "orders.user_id")
+            .where_(("users.active", true))
+            .group_by(("users.name", "orders.status"))
+            .order_by("users.name")
+            .order_by_desc("orders.status")
+            .limit(10);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT users.name, orders.status FROM users INNER JOIN orders ON users.id = orders.user_id WHERE users.active = ? GROUP BY users.name, orders.status ORDER BY users.name ASC, orders.status DESC LIMIT 10");
+    }
+    
+    #[test]
+    fn test_order_by_with_limit_offset() {
+        let query = SelectBuilder::new("users")
+            .order_by("created_at")
+            .limit(25)
+            .offset(50);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at ASC LIMIT 25 OFFSET 50");
     }
 }
