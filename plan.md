@@ -425,8 +425,8 @@ The library will include comprehensive migration documentation showing equivalen
 | Feature | Knex.js | Archibald |
 |---------|---------|-----------|
 | Basic select | `knex('users').select('*')` | `archibald::table("users").select_all()` |
-| Where clause | `knex('users').where('age', '>', 18)` | `archibald::table("users").where(("age", op::GT, 18))` |
-| Where equality | `knex('users').where('age', 18)` | `archibald::table("users").where(("age", 18))` |
+| Where clause | `knex('users').where('age', '>', 18)` | `archibald::table("users").where_(("age", op::GT, 18))` |
+| Where equality | `knex('users').where('age', 18)` | `archibald::table("users").where_(("age", 18))` |
 | Joins | `knex('users').join('posts', 'users.id', 'posts.user_id')` | `archibald::table("users").inner_join::<posts>("users.id", "posts.user_id")` |
 | Transactions | `knex.transaction(trx => { ... })` | `archibald::transaction(&pool, \|trx\| async move { ... })` |
 
@@ -536,31 +536,70 @@ impl QueryBuilder {
 use archibald::op;
 
 archibald::table("users")
-    .where(("age", op::GT, 18))           // Using op constants
-    .where(("score", ">", 100))           // Using string literals (validated)
-    .where(("name", "John"))              // Defaults to EQ
-    .where(("status", op::IN, &["active", "pending"]))  // IN clause
-    .where(("email", "LIKE", "%@gmail.com"))            // LIKE pattern
+    .where_(("age", op::GT, 18))           // Using op constants
+    .where_(("score", ">", 100))           // Using string literals (validated)
+    .where_(("name", "John"))              // Defaults to EQ
+    .where_(("status", op::IN, &["active", "pending"]))  // IN clause
+    .where_(("email", "LIKE", "%@gmail.com"))            // LIKE pattern
 
 // Custom operators for advanced use cases:
 archibald::table("documents")
-    .where(("content", Operator::custom("@@"), "search term"))  // PostgreSQL full-text search
-    .where(("location", Operator::custom("<->"), point))        // PostGIS distance operator
+    .where_(("content", Operator::custom("@@"), "search term"))  // PostgreSQL full-text search
+    .where_(("location", Operator::custom("<->"), point))        // PostGIS distance operator
 
-// Chained where() calls are implicitly AND'd together
+// Chained where_() calls are implicitly AND'd together
 // For OR conditions:
 archibald::table("users")
-    .where(("age", ">", 18))
+    .where_(("age", ">", 18))
     .or_where(("status", "admin"))        // Explicit OR
-    .and_where(("active", true))          // Explicit AND (same as .where())
+    .and_where(("active", true))          // Explicit AND (same as .where_())
 ```
 
 **Benefits:**
 - **Type Safety**: Only valid operators compile or run (panics on invalid strings)
-- **Familiar Syntax**: `where(("age", ">", 18))` reads like SQL and knex
+- **Familiar Syntax**: `where_(("age", ">", 18))` reads like SQL and knex
 - **Flexible**: Supports constants (`op::GT`), strings (`">"`), and shorthand equality
 - **Extensible**: `Operator::custom()` escape hatch for database-specific operators
 - **Performance**: Zero-cost operator constants, validated strings panic early
 - **Clear Errors**: Helpful panic messages suggest correct alternatives
+
+## WHERE Clause Method Design Decision
+
+**Method Name Choice: `where_` vs `where`**
+
+We chose to use `where_` (with trailing underscore) instead of Rust's raw identifier syntax `r#where` for the following reasons:
+
+**Why not `r#where`:**
+- Difficult to type and remember the `r#` prefix
+- Poor autocomplete experience (doesn't show up when typing "where")  
+- Unusual syntax that most Rust developers aren't familiar with
+- Creates cognitive overhead when reading code
+
+**Why `where_`:**
+- **Autocomplete friendly**: Starts typing "where" and gets suggestions immediately
+- **Clear intent**: Obviously maps to SQL WHERE clause
+- **Conventional**: Many Rust libraries use trailing underscores for reserved keywords
+- **Readable**: No special syntax or prefixes needed
+
+**Method Relationship:**
+- `.where_(condition)` - Primary method for WHERE conditions (implicit AND)
+- `.and_where(condition)` - Explicit AND condition (identical to `.where_()`)
+- `.or_where(condition)` - Explicit OR condition
+
+**Usage Examples:**
+```rust
+// All these are equivalent for AND conditions:
+table("users").where_(("age", op::GT, 18)).where_(("status", "active"))
+table("users").where_(("age", op::GT, 18)).and_where(("status", "active"))
+
+// Mixed AND/OR conditions:
+table("users")
+    .where_(("age", op::GT, 18))     // First condition
+    .and_where(("status", "active")) // Explicit AND  
+    .or_where(("role", "admin"))     // OR condition
+    .and_where(("verified", true))   // Back to AND
+```
+
+This approach prioritizes developer ergonomics while maintaining clear SQL semantics.
 
 This plan creates a Rust query builder that feels familiar to knex.js users while leveraging Rust's unique advantages for better safety, performance, and developer experience.
