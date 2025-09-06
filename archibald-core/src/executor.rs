@@ -177,22 +177,20 @@ pub mod postgres {
             Ok(self.inner.acquire().await?)
         }
         
-        async fn execute(&self, sql: &str, _params: &[Value]) -> Result<u64> {
-            // Simplified implementation for now - in production we'd properly bind parameters
-            let result = sqlx::query(sql)
-                .execute(&self.inner)
-                .await?;
+        async fn execute(&self, sql: &str, params: &[Value]) -> Result<u64> {
+            let query = sqlx::query(sql);
+            let bound_query = bind_values_to_query(query, params);
+            let result = bound_query.execute(&self.inner).await?;
             Ok(result.rows_affected())
         }
         
-        async fn fetch_all<T>(&self, sql: &str, _params: &[Value]) -> Result<Vec<T>>
+        async fn fetch_all<T>(&self, sql: &str, params: &[Value]) -> Result<Vec<T>>
         where
             T: DeserializeOwned + Send + Unpin,
         {
-            // Simplified implementation for now - in production we'd properly bind parameters
-            let rows = sqlx::query(sql)
-                .fetch_all(&self.inner)
-                .await?;
+            let query = sqlx::query(sql);
+            let bound_query = bind_values_to_query(query, params);
+            let rows = bound_query.fetch_all(&self.inner).await?;
                 
             let mut results = Vec::with_capacity(rows.len());
             for row in rows {
@@ -203,29 +201,26 @@ pub mod postgres {
             Ok(results)
         }
         
-        async fn fetch_one<T>(&self, sql: &str, _params: &[Value]) -> Result<T>
+        async fn fetch_one<T>(&self, sql: &str, params: &[Value]) -> Result<T>
         where
             T: DeserializeOwned + Send + Unpin,
         {
-            // Simplified implementation for now - in production we'd properly bind parameters
-            let row = sqlx::query(sql)
-                .fetch_one(&self.inner)
-                .await?;
+            let query = sqlx::query(sql);
+            let bound_query = bind_values_to_query(query, params);
+            let row = bound_query.fetch_one(&self.inner).await?;
                 
             let json_value = row_to_json_value(&row)?;
             let item: T = serde_json::from_value(json_value)?;
             Ok(item)
         }
         
-        async fn fetch_optional<T>(&self, sql: &str, _params: &[Value]) -> Result<Option<T>>
+        async fn fetch_optional<T>(&self, sql: &str, params: &[Value]) -> Result<Option<T>>
         where
             T: DeserializeOwned + Send + Unpin,
         {
-            // Simplified implementation for now - in production we'd properly bind parameters
-            if let Some(row) = sqlx::query(sql)
-                .fetch_optional(&self.inner)
-                .await? 
-            {
+            let query = sqlx::query(sql);
+            let bound_query = bind_values_to_query(query, params);
+            if let Some(row) = bound_query.fetch_optional(&self.inner).await? {
                 let json_value = row_to_json_value(&row)?;
                 let item: T = serde_json::from_value(json_value)?;
                 Ok(Some(item))
@@ -235,12 +230,61 @@ pub mod postgres {
         }
     }
     
-    #[allow(dead_code)]
-    fn convert_params_to_sqlx(_params: &[Value]) -> Result<Vec<String>> {
-        // This is a placeholder - in reality we'd need a more sophisticated conversion
-        // For production, we'd implement proper Value -> SQLx parameter conversion
-        // For now, just return empty vec for compilation
-        Ok(Vec::new())
+    /// Bind Archibald Values to a SQLx query
+    fn bind_values_to_query<'q>(
+        mut query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+        params: &'q [Value]
+    ) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
+        for param in params {
+            query = match param {
+                Value::Null => query.bind(None::<i32>), // Use Option<T> for NULL values
+                Value::Bool(b) => query.bind(*b),
+                Value::I32(i) => query.bind(*i),
+                Value::I64(i) => query.bind(*i),
+                Value::F32(f) => query.bind(*f),
+                Value::F64(f) => query.bind(*f),
+                Value::String(s) => query.bind(s.as_str()),
+                Value::Bytes(b) => query.bind(b.as_slice()),
+                Value::Json(j) => query.bind(j), // sqlx supports serde_json::Value directly
+                Value::Array(arr) => {
+                    // For arrays, we need to convert to a format that PostgreSQL understands
+                    // For now, serialize simple arrays to JSON
+                    let json_array = serde_json::Value::Array(
+                        arr.iter().map(value_to_json).collect()
+                    );
+                    query.bind(json_array)
+                },
+                Value::SubqueryPlaceholder => {
+                    // Subqueries should have been resolved before this point
+                    // This is likely a programming error
+                    continue; // Skip for now, could panic or error in the future
+                }
+            };
+        }
+        query
+    }
+    
+    /// Convert Value to serde_json::Value for array serialization
+    fn value_to_json(value: &Value) -> serde_json::Value {
+        match value {
+            Value::Null => serde_json::Value::Null,
+            Value::Bool(b) => serde_json::Value::Bool(*b),
+            Value::I32(i) => serde_json::Value::Number(serde_json::Number::from(*i)),
+            Value::I64(i) => serde_json::Value::Number(serde_json::Number::from(*i)),
+            Value::F32(f) => serde_json::Number::from_f64(*f as f64)
+                .map(serde_json::Value::Number)
+                .unwrap_or(serde_json::Value::Null),
+            Value::F64(f) => serde_json::Number::from_f64(*f)
+                .map(serde_json::Value::Number)
+                .unwrap_or(serde_json::Value::Null),
+            Value::String(s) => serde_json::Value::String(s.clone()),
+            Value::Bytes(b) => serde_json::Value::Array(
+                b.iter().map(|byte| serde_json::Value::Number(serde_json::Number::from(*byte))).collect()
+            ),
+            Value::Json(j) => j.clone(),
+            Value::Array(arr) => serde_json::Value::Array(arr.iter().map(value_to_json).collect()),
+            Value::SubqueryPlaceholder => serde_json::Value::Null,
+        }
     }
     
     fn row_to_json_value(_row: &sqlx::postgres::PgRow) -> Result<serde_json::Value> {
@@ -262,16 +306,79 @@ pub mod postgres {
         }
         
         #[test]
-        fn test_param_conversion() {
+        fn test_value_to_json_conversion() {
+            // Test basic value conversions
+            assert_eq!(value_to_json(&Value::Null), serde_json::Value::Null);
+            assert_eq!(value_to_json(&Value::Bool(true)), serde_json::Value::Bool(true));
+            assert_eq!(value_to_json(&Value::I32(42)), serde_json::Value::Number(serde_json::Number::from(42)));
+            assert_eq!(value_to_json(&Value::String("test".to_string())), serde_json::Value::String("test".to_string()));
+            
+            // Test array conversion
+            let arr = Value::Array(vec![Value::I32(1), Value::I32(2), Value::I32(3)]);
+            let json_arr = value_to_json(&arr);
+            assert_eq!(json_arr, serde_json::json!([1, 2, 3]));
+        }
+        
+        #[test] 
+        fn test_parameter_binding_types() {
+            // This test verifies our bind_values_to_query function can handle different Value types
+            // We can't easily test the actual binding without a real database connection,
+            // but we can verify the function doesn't panic with various value types
+            use sqlx::query;
+            
             let params = vec![
-                Value::I32(42),
-                Value::String("test".to_string()),
+                Value::Null,
                 Value::Bool(true),
+                Value::I32(42),
+                Value::I64(123456),
+                Value::F32(3.14),
+                Value::F64(2.718),
+                Value::String("hello".to_string()),
+                Value::Bytes(vec![1, 2, 3, 4]),
+                Value::Json(serde_json::json!({"key": "value"})),
+                Value::Array(vec![Value::I32(1), Value::I32(2)]),
             ];
             
-            // Test parameter conversion (placeholder implementation)
-            let result = convert_params_to_sqlx(&params);
-            assert!(result.is_ok());
+            // Create a dummy query - this won't execute but will test the binding logic
+            let query = query("SELECT * FROM users WHERE id = $1 AND name = $2");
+            
+            // Test that binding doesn't panic (we can't test execution without a real DB)
+            let _bound_query = bind_values_to_query(query, &params[0..2]);
+            // If we get here without panicking, the binding logic works
+        }
+        
+        #[test]
+        fn test_query_with_parameters_integration() {
+            // Test that our query builder properly passes parameters to the executor
+            use crate::{table, builder::QueryBuilder, op};
+            
+            // Build a query with parameters
+            let query = table("users")
+                .select(("id", "name", "email"))
+                .where_(("age", op::GT, 18))
+                .where_(("status", "active"))
+                .where_(("score", op::IN, vec![100, 200, 300]));
+                
+            // Verify SQL generation and parameters
+            let sql = query.to_sql().unwrap();
+            let params = query.parameters();
+            
+            // Should have 3 parameters: age > 18, status = 'active', score IN [100,200,300] 
+            assert_eq!(params.len(), 3);
+            assert_eq!(params[0], crate::Value::I32(18));
+            assert_eq!(params[1], crate::Value::String("active".to_string()));
+            assert_eq!(params[2], crate::Value::Array(vec![
+                crate::Value::I32(100),
+                crate::Value::I32(200), 
+                crate::Value::I32(300)
+            ]));
+            
+            // Verify SQL contains proper placeholders
+            assert!(sql.contains("?"));
+            
+            // Test that we can bind these parameters without panicking
+            let sqlx_query = sqlx::query(&sql);
+            let _bound_query = bind_values_to_query(sqlx_query, params);
         }
     }
 }

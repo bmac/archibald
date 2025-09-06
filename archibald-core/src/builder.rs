@@ -465,6 +465,7 @@ impl SelectBuilder {
             value,
             connector: WhereConnector::And,
         });
+        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
         
         self
     }
@@ -482,6 +483,7 @@ impl SelectBuilder {
             value,
             connector: WhereConnector::Or,
         });
+        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
         
         self
     }
@@ -1287,6 +1289,7 @@ impl UpdateBuilder {
             value,
             connector: WhereConnector::And,
         });
+        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
         
         self
     }
@@ -1304,6 +1307,7 @@ impl UpdateBuilder {
             value,
             connector: WhereConnector::Or,
         });
+        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
         
         self
     }
@@ -1404,6 +1408,7 @@ impl DeleteBuilder {
             value,
             connector: WhereConnector::And,
         });
+        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
         
         self
     }
@@ -1421,6 +1426,7 @@ impl DeleteBuilder {
             value,
             connector: WhereConnector::Or,
         });
+        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
         
         self
     }
