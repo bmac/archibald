@@ -47,6 +47,121 @@ pub trait ConnectionPool: Send + Sync + Clone {
         T: DeserializeOwned + Send + Unpin;
 }
 
+/// Transaction isolation levels
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IsolationLevel {
+    ReadUncommitted,
+    ReadCommitted,
+    RepeatableRead,
+    Serializable,
+}
+
+impl IsolationLevel {
+    pub fn to_sql(&self) -> &'static str {
+        match self {
+            IsolationLevel::ReadUncommitted => "READ UNCOMMITTED",
+            IsolationLevel::ReadCommitted => "READ COMMITTED", 
+            IsolationLevel::RepeatableRead => "REPEATABLE READ",
+            IsolationLevel::Serializable => "SERIALIZABLE",
+        }
+    }
+}
+
+/// Trait for database transactions
+pub trait Transaction: Send + Sync {
+    /// Execute a query that returns no results (INSERT, UPDATE, DELETE)
+    fn execute(
+        &mut self, 
+        sql: &str, 
+        params: &[Value]
+    ) -> impl Future<Output = Result<u64>> + Send;
+    
+    /// Execute a query that returns multiple rows
+    fn fetch_all<T>(
+        &mut self,
+        sql: &str,
+        params: &[Value],
+    ) -> impl Future<Output = Result<Vec<T>>> + Send
+    where
+        T: DeserializeOwned + Send + Unpin;
+    
+    /// Execute a query that returns a single row
+    fn fetch_one<T>(
+        &mut self,
+        sql: &str,
+        params: &[Value],
+    ) -> impl Future<Output = Result<T>> + Send
+    where
+        T: DeserializeOwned + Send + Unpin;
+    
+    /// Execute a query that returns an optional row
+    fn fetch_optional<T>(
+        &mut self,
+        sql: &str,
+        params: &[Value],
+    ) -> impl Future<Output = Result<Option<T>>> + Send
+    where
+        T: DeserializeOwned + Send + Unpin;
+        
+    /// Commit the transaction
+    fn commit(self) -> impl Future<Output = Result<()>> + Send
+    where
+        Self: Sized;
+    
+    /// Rollback the transaction
+    fn rollback(self) -> impl Future<Output = Result<()>> + Send
+    where
+        Self: Sized;
+        
+    /// Create a savepoint with the given name
+    fn savepoint(&mut self, name: &str) -> impl Future<Output = Result<()>> + Send;
+    
+    /// Rollback to a savepoint
+    fn rollback_to_savepoint(&mut self, name: &str) -> impl Future<Output = Result<()>> + Send;
+    
+    /// Release a savepoint
+    fn release_savepoint(&mut self, name: &str) -> impl Future<Output = Result<()>> + Send;
+}
+
+/// Extension trait for connection pools to support transactions
+pub trait TransactionalPool: ConnectionPool {
+    type Transaction: Transaction;
+    
+    /// Start a new transaction with default isolation level
+    fn begin_transaction(&self) -> impl Future<Output = Result<Self::Transaction>> + Send;
+    
+    /// Start a new transaction with specified isolation level
+    fn begin_transaction_with_isolation(
+        &self, 
+        isolation: IsolationLevel
+    ) -> impl Future<Output = Result<Self::Transaction>> + Send;
+}
+
+/// Convenience function for running code in a transaction
+pub async fn transaction<P, F, Fut, T, E>(
+    pool: &P,
+    f: F,
+) -> Result<T>
+where
+    P: TransactionalPool,
+    F: FnOnce(&mut P::Transaction) -> Fut,
+    Fut: Future<Output = std::result::Result<T, E>> + Send,
+    E: Into<crate::Error>,
+{
+    let mut txn = pool.begin_transaction().await?;
+    
+    match f(&mut txn).await {
+        Ok(result) => {
+            txn.commit().await?;
+            Ok(result)
+        }
+        Err(e) => {
+            let _ = txn.rollback().await; // Ignore rollback errors
+            Err(e.into())
+        }
+    }
+}
+
 /// Extension trait for query builders to add execution methods
 pub trait ExecutableQuery<T>: QueryBuilder {
     /// Execute the query and return all results
@@ -66,6 +181,24 @@ pub trait ExecutableQuery<T>: QueryBuilder {
     where
         P: ConnectionPool,
         T: DeserializeOwned + Send + Unpin;
+        
+    /// Execute the query within a transaction and return all results
+    fn fetch_all_tx<Tx>(self, tx: &mut Tx) -> impl Future<Output = Result<Vec<T>>> + Send
+    where
+        Tx: Transaction,
+        T: DeserializeOwned + Send + Unpin;
+    
+    /// Execute the query within a transaction and return the first result
+    fn fetch_one_tx<Tx>(self, tx: &mut Tx) -> impl Future<Output = Result<T>> + Send
+    where
+        Tx: Transaction,
+        T: DeserializeOwned + Send + Unpin;
+    
+    /// Execute the query within a transaction and return an optional result
+    fn fetch_optional_tx<Tx>(self, tx: &mut Tx) -> impl Future<Output = Result<Option<T>>> + Send
+    where
+        Tx: Transaction,
+        T: DeserializeOwned + Send + Unpin;
 }
 
 /// Extension trait for modification queries (INSERT, UPDATE, DELETE)
@@ -74,6 +207,11 @@ pub trait ExecutableModification: QueryBuilder {
     fn execute<P>(self, pool: &P) -> impl Future<Output = Result<u64>> + Send
     where
         P: ConnectionPool;
+        
+    /// Execute the modification query within a transaction and return the number of affected rows
+    fn execute_tx<Tx>(self, tx: &mut Tx) -> impl Future<Output = Result<u64>> + Send
+    where
+        Tx: Transaction;
 }
 
 // Implementation for SelectBuilder
@@ -107,6 +245,33 @@ where
         let params = self.parameters();
         pool.fetch_optional(&sql, params).await
     }
+    
+    async fn fetch_all_tx<Tx>(self, tx: &mut Tx) -> Result<Vec<T>>
+    where
+        Tx: Transaction,
+    {
+        let sql = self.to_sql()?;
+        let params = self.parameters();
+        tx.fetch_all(&sql, params).await
+    }
+    
+    async fn fetch_one_tx<Tx>(self, tx: &mut Tx) -> Result<T>
+    where
+        Tx: Transaction,
+    {
+        let sql = self.to_sql()?;
+        let params = self.parameters();
+        tx.fetch_one(&sql, params).await
+    }
+    
+    async fn fetch_optional_tx<Tx>(self, tx: &mut Tx) -> Result<Option<T>>
+    where
+        Tx: Transaction,
+    {
+        let sql = self.to_sql()?;
+        let params = self.parameters();
+        tx.fetch_optional(&sql, params).await
+    }
 }
 
 // Implementation for InsertBuilder
@@ -118,6 +283,15 @@ impl ExecutableModification for crate::InsertBuilder {
         let sql = self.to_sql()?;
         let params = self.parameters();
         pool.execute(&sql, params).await
+    }
+    
+    async fn execute_tx<Tx>(self, tx: &mut Tx) -> Result<u64>
+    where
+        Tx: Transaction,
+    {
+        let sql = self.to_sql()?;
+        let params = self.parameters();
+        tx.execute(&sql, params).await
     }
 }
 
@@ -131,6 +305,15 @@ impl ExecutableModification for crate::UpdateBuilder {
         let params = self.parameters();
         pool.execute(&sql, params).await
     }
+    
+    async fn execute_tx<Tx>(self, tx: &mut Tx) -> Result<u64>
+    where
+        Tx: Transaction,
+    {
+        let sql = self.to_sql()?;
+        let params = self.parameters();
+        tx.execute(&sql, params).await
+    }
 }
 
 // Implementation for DeleteBuilder
@@ -142,6 +325,15 @@ impl ExecutableModification for crate::DeleteBuilder {
         let sql = self.to_sql()?;
         let params = self.parameters();
         pool.execute(&sql, params).await
+    }
+    
+    async fn execute_tx<Tx>(self, tx: &mut Tx) -> Result<u64>
+    where
+        Tx: Transaction,
+    {
+        let sql = self.to_sql()?;
+        let params = self.parameters();
+        tx.execute(&sql, params).await
     }
 }
 
@@ -227,6 +419,109 @@ pub mod postgres {
             } else {
                 Ok(None)
             }
+        }
+    }
+    
+    /// PostgreSQL transaction wrapper
+    pub struct PostgresTransaction {
+        inner: sqlx::Transaction<'static, sqlx::Postgres>,
+    }
+    
+    impl Transaction for PostgresTransaction {
+        async fn execute(&mut self, sql: &str, params: &[Value]) -> Result<u64> {
+            let query = sqlx::query(sql);
+            let bound_query = bind_values_to_query(query, params);
+            let result = bound_query.execute(&mut *self.inner).await?;
+            Ok(result.rows_affected())
+        }
+        
+        async fn fetch_all<T>(&mut self, sql: &str, params: &[Value]) -> Result<Vec<T>>
+        where
+            T: DeserializeOwned + Send + Unpin,
+        {
+            let query = sqlx::query(sql);
+            let bound_query = bind_values_to_query(query, params);
+            let rows = bound_query.fetch_all(&mut *self.inner).await?;
+                
+            let mut results = Vec::with_capacity(rows.len());
+            for row in rows {
+                let json_value = row_to_json_value(&row)?;
+                let item: T = serde_json::from_value(json_value)?;
+                results.push(item);
+            }
+            Ok(results)
+        }
+        
+        async fn fetch_one<T>(&mut self, sql: &str, params: &[Value]) -> Result<T>
+        where
+            T: DeserializeOwned + Send + Unpin,
+        {
+            let query = sqlx::query(sql);
+            let bound_query = bind_values_to_query(query, params);
+            let row = bound_query.fetch_one(&mut *self.inner).await?;
+                
+            let json_value = row_to_json_value(&row)?;
+            let item: T = serde_json::from_value(json_value)?;
+            Ok(item)
+        }
+        
+        async fn fetch_optional<T>(&mut self, sql: &str, params: &[Value]) -> Result<Option<T>>
+        where
+            T: DeserializeOwned + Send + Unpin,
+        {
+            let query = sqlx::query(sql);
+            let bound_query = bind_values_to_query(query, params);
+            if let Some(row) = bound_query.fetch_optional(&mut *self.inner).await? {
+                let json_value = row_to_json_value(&row)?;
+                let item: T = serde_json::from_value(json_value)?;
+                Ok(Some(item))
+            } else {
+                Ok(None)
+            }
+        }
+        
+        async fn commit(self) -> Result<()> {
+            self.inner.commit().await?;
+            Ok(())
+        }
+        
+        async fn rollback(self) -> Result<()> {
+            self.inner.rollback().await?;
+            Ok(())
+        }
+        
+        async fn savepoint(&mut self, name: &str) -> Result<()> {
+            let sql = format!("SAVEPOINT {}", name);
+            sqlx::query(&sql).execute(&mut *self.inner).await?;
+            Ok(())
+        }
+        
+        async fn rollback_to_savepoint(&mut self, name: &str) -> Result<()> {
+            let sql = format!("ROLLBACK TO SAVEPOINT {}", name);
+            sqlx::query(&sql).execute(&mut *self.inner).await?;
+            Ok(())
+        }
+        
+        async fn release_savepoint(&mut self, name: &str) -> Result<()> {
+            let sql = format!("RELEASE SAVEPOINT {}", name);
+            sqlx::query(&sql).execute(&mut *self.inner).await?;
+            Ok(())
+        }
+    }
+    
+    impl TransactionalPool for PostgresPool {
+        type Transaction = PostgresTransaction;
+        
+        async fn begin_transaction(&self) -> Result<Self::Transaction> {
+            let txn = self.inner.begin().await?;
+            Ok(PostgresTransaction { inner: txn })
+        }
+        
+        async fn begin_transaction_with_isolation(&self, isolation: IsolationLevel) -> Result<Self::Transaction> {
+            let mut txn = self.inner.begin().await?;
+            let sql = format!("SET TRANSACTION ISOLATION LEVEL {}", isolation.to_sql());
+            sqlx::query(&sql).execute(&mut *txn).await?;
+            Ok(PostgresTransaction { inner: txn })
         }
     }
     
@@ -379,6 +674,185 @@ pub mod postgres {
             // Test that we can bind these parameters without panicking
             let sqlx_query = sqlx::query(&sql);
             let _bound_query = bind_values_to_query(sqlx_query, params);
+        }
+        
+        #[test]
+        fn test_transaction_isolation_levels() {
+            // Test isolation level SQL generation
+            assert_eq!(IsolationLevel::ReadUncommitted.to_sql(), "READ UNCOMMITTED");
+            assert_eq!(IsolationLevel::ReadCommitted.to_sql(), "READ COMMITTED");
+            assert_eq!(IsolationLevel::RepeatableRead.to_sql(), "REPEATABLE READ");
+            assert_eq!(IsolationLevel::Serializable.to_sql(), "SERIALIZABLE");
+        }
+        
+        #[tokio::test]
+        async fn test_transaction_convenience_function() {
+            use crate::{transaction};
+            
+            // Mock pool that would be used in a real transaction
+            let pool = MockTransactionPool::new();
+            
+            // Test successful transaction
+            let result: Result<i32> = transaction(&pool, |_txn| async move {
+                // Simulate a simple successful operation
+                Ok::<i32, crate::Error>(42)
+            }).await;
+            
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 42);
+        }
+        
+        #[tokio::test]
+        async fn test_transaction_rollback_on_error() {
+            use crate::transaction;
+            
+            let pool = MockTransactionPool::new();
+            
+            // Test transaction rollback on error
+            let result: Result<()> = transaction(&pool, |_txn| async move {
+                // Simulate an error that should cause rollback
+                Err(crate::Error::sql_generation("Simulated error"))
+            }).await;
+            
+            assert!(result.is_err());
+        }
+        
+        #[tokio::test] 
+        async fn test_savepoints() {
+            let pool = MockTransactionPool::new();
+            let mut txn = pool.begin_transaction().await.unwrap();
+            
+            // Test savepoint operations
+            txn.savepoint("sp1").await.unwrap();
+            txn.rollback_to_savepoint("sp1").await.unwrap();
+            txn.release_savepoint("sp1").await.unwrap();
+            
+            txn.rollback().await.unwrap();
+        }
+        
+        // Mock types for testing transaction functionality without real database
+        #[derive(Clone)]
+        struct MockTransactionPool;
+        
+        impl MockTransactionPool {
+            fn new() -> Self {
+                Self
+            }
+        }
+        
+        impl ConnectionPool for MockTransactionPool {
+            type Connection = ();
+            
+            async fn acquire(&self) -> Result<Self::Connection> {
+                Ok(())
+            }
+            
+            async fn execute(&self, _sql: &str, _params: &[Value]) -> Result<u64> {
+                Ok(1)
+            }
+            
+            async fn fetch_all<T>(&self, _sql: &str, _params: &[Value]) -> Result<Vec<T>>
+            where
+                T: DeserializeOwned + Send + Unpin,
+            {
+                Ok(Vec::new())
+            }
+            
+            async fn fetch_one<T>(&self, _sql: &str, _params: &[Value]) -> Result<T>
+            where
+                T: DeserializeOwned + Send + Unpin,
+            {
+                Err(crate::Error::sql_generation("Mock fetch_one"))
+            }
+            
+            async fn fetch_optional<T>(&self, _sql: &str, _params: &[Value]) -> Result<Option<T>>
+            where
+                T: DeserializeOwned + Send + Unpin,
+            {
+                Ok(None)
+            }
+        }
+        
+        impl TransactionalPool for MockTransactionPool {
+            type Transaction = MockTransaction;
+            
+            async fn begin_transaction(&self) -> Result<Self::Transaction> {
+                Ok(MockTransaction)
+            }
+            
+            async fn begin_transaction_with_isolation(&self, _isolation: IsolationLevel) -> Result<Self::Transaction> {
+                Ok(MockTransaction)
+            }
+        }
+        
+        struct MockTransaction;
+        
+        impl Transaction for MockTransaction {
+            async fn execute(&mut self, _sql: &str, _params: &[Value]) -> Result<u64> {
+                Ok(1)
+            }
+            
+            async fn fetch_all<T>(&mut self, _sql: &str, _params: &[Value]) -> Result<Vec<T>>
+            where
+                T: DeserializeOwned + Send + Unpin,
+            {
+                if std::any::type_name::<T>().contains("User") {
+                    let users_json = serde_json::json!([
+                        {"id": 1, "name": "John", "email": "john@example.com"}
+                    ]);
+                    let users: Vec<T> = serde_json::from_value(users_json)?;
+                    Ok(users)
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+            
+            async fn fetch_one<T>(&mut self, _sql: &str, _params: &[Value]) -> Result<T>
+            where
+                T: DeserializeOwned + Send + Unpin,
+            {
+                if std::any::type_name::<T>().contains("User") {
+                    let user_json = serde_json::json!({"id": 1, "name": "John", "email": "john@example.com"});
+                    let user: T = serde_json::from_value(user_json)?;
+                    Ok(user)
+                } else {
+                    Err(crate::Error::sql_generation("No mock data for this type"))
+                }
+            }
+            
+            async fn fetch_optional<T>(&mut self, _sql: &str, _params: &[Value]) -> Result<Option<T>>
+            where
+                T: DeserializeOwned + Send + Unpin,
+            {
+                Ok(None)
+            }
+            
+            async fn commit(self) -> Result<()> {
+                Ok(())
+            }
+            
+            async fn rollback(self) -> Result<()> {
+                Ok(())
+            }
+            
+            async fn savepoint(&mut self, _name: &str) -> Result<()> {
+                Ok(())
+            }
+            
+            async fn rollback_to_savepoint(&mut self, _name: &str) -> Result<()> {
+                Ok(())
+            }
+            
+            async fn release_savepoint(&mut self, _name: &str) -> Result<()> {
+                Ok(())
+            }
+        }
+        
+        #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+        struct User {
+            id: i32,
+            name: String,
+            email: String,
         }
     }
 }
