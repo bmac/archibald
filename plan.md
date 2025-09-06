@@ -601,4 +601,99 @@ table("users")
 
 This approach prioritizes developer ergonomics while maintaining clear SQL semantics.
 
+## Deferred Validation Architecture Design Decision
+
+**Problem**: Original design had inconsistent validation approaches - operators would panic immediately during query building, while subqueries attempted to return Results throughout the chain, creating a poor user experience.
+
+**Solution**: Implement deferred validation architecture where all validation happens at `to_sql()` time.
+
+**Key Design Principles:**
+1. **Clean Fluent API**: No `Result` handling required during query building
+2. **User-Friendly Error Handling**: Library provides "escape valve" via `to_sql()` instead of panicking
+3. **Consistent Architecture**: Both operators and subqueries use same deferred validation pattern
+
+**Implementation Details:**
+
+### Operator System (src/operator.rs)
+```rust
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Operator {
+    /// Known valid operator
+    Known(&'static str),
+    /// Unknown operator (validated at to_sql() time)
+    Unknown(String),
+}
+
+impl Operator {
+    /// Validate that this operator is recognized (used at to_sql() time)
+    pub fn validate(&self) -> Result<()> {
+        match self {
+            Operator::Known(_) => Ok(()),
+            Operator::Unknown(op) => {
+                Err(Error::invalid_query(format!(
+                    "Unknown operator '{}'. Use Operator::{} constants or Operator::custom(\\\"{}\\\") for custom operators.", 
+                    op, op.to_uppercase().replace(" ", "_").replace("!", "N"), op
+                )))
+            }
+        }
+    }
+}
+```
+
+### Query Builder Validation (src/builder.rs)
+All query builders validate operators and subqueries at `to_sql()` time:
+
+```rust
+impl QueryBuilder for SelectBuilder {
+    fn to_sql(&self) -> Result<String> {
+        // Validate all operators before generating SQL
+        for condition in &self.where_conditions {
+            condition.operator.validate()?;
+        }
+        
+        for condition in &self.having_conditions {
+            condition.operator.validate()?;
+        }
+        
+        for condition in &self.subquery_conditions {
+            condition.operator.validate()?;
+            // Validate subquery recursively
+            condition.subquery.query.to_sql()?;
+        }
+        
+        for join_clause in &self.join_clauses {
+            for condition in &join_clause.on_conditions {
+                condition.operator.validate()?;
+            }
+        }
+        
+        // Generate SQL after all validation passes...
+    }
+}
+```
+
+**Benefits:**
+- **Ergonomic API**: Users can chain methods fluently without dealing with Results
+- **Clear Error Point**: All validation errors surface at the single `to_sql()` call
+- **Helpful Error Messages**: Invalid operators provide suggestions for correct usage
+- **Consistent Experience**: Same pattern for operators, subqueries, and future validation
+
+**Example Usage:**
+```rust
+// Building queries never panics or requires Result handling
+let query = table("users")
+    .where_(("age", "INVALID_OPERATOR", 18))  // Stores as Unknown variant
+    .where_in("id", subquery);                // Defers subquery validation
+
+// All validation happens here with clear error messages
+match query.to_sql() {
+    Ok(sql) => println!("SQL: {}", sql),
+    Err(e) => println!("Invalid query: {}", e), // "Unknown operator 'INVALID_OPERATOR'. Use..."
+}
+```
+
+This architecture prioritizes developer experience while maintaining type safety and providing clear error handling.
+
+---
+
 This plan creates a Rust query builder that feels familiar to knex.js users while leveraging Rust's unique advantages for better safety, performance, and developer experience.
