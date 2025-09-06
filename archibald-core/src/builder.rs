@@ -58,6 +58,162 @@ pub enum WhereConnector {
     Or,
 }
 
+/// Aggregation function types
+#[derive(Debug, Clone, PartialEq)]
+pub enum AggregateFunction {
+    Count,
+    CountDistinct,
+    Sum,
+    Avg,
+    Min,
+    Max,
+}
+
+impl std::fmt::Display for AggregateFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AggregateFunction::Count => write!(f, "COUNT"),
+            AggregateFunction::CountDistinct => write!(f, "COUNT(DISTINCT"),
+            AggregateFunction::Sum => write!(f, "SUM"),
+            AggregateFunction::Avg => write!(f, "AVG"),
+            AggregateFunction::Min => write!(f, "MIN"),
+            AggregateFunction::Max => write!(f, "MAX"),
+        }
+    }
+}
+
+/// Column selector that can be a regular column or an aggregation
+#[derive(Debug, Clone, PartialEq)]
+pub enum ColumnSelector {
+    Column(String),
+    Aggregate {
+        function: AggregateFunction,
+        column: String,
+        alias: Option<String>,
+    },
+    CountAll {
+        alias: Option<String>,
+    },
+}
+
+impl ColumnSelector {
+    /// Create a COUNT(*) selector
+    pub fn count() -> Self {
+        Self::CountAll { alias: None }
+    }
+    
+    /// Create a COUNT(*) selector with alias
+    pub fn count_as(alias: &str) -> Self {
+        Self::CountAll { 
+            alias: Some(alias.to_string()) 
+        }
+    }
+    
+    /// Create a COUNT(column) selector
+    pub fn count_column(column: &str) -> Self {
+        Self::Aggregate {
+            function: AggregateFunction::Count,
+            column: column.to_string(),
+            alias: None,
+        }
+    }
+    
+    /// Create a COUNT(DISTINCT column) selector
+    pub fn count_distinct(column: &str) -> Self {
+        Self::Aggregate {
+            function: AggregateFunction::CountDistinct,
+            column: column.to_string(),
+            alias: None,
+        }
+    }
+    
+    /// Create a SUM(column) selector
+    pub fn sum(column: &str) -> Self {
+        Self::Aggregate {
+            function: AggregateFunction::Sum,
+            column: column.to_string(),
+            alias: None,
+        }
+    }
+    
+    /// Create an AVG(column) selector
+    pub fn avg(column: &str) -> Self {
+        Self::Aggregate {
+            function: AggregateFunction::Avg,
+            column: column.to_string(),
+            alias: None,
+        }
+    }
+    
+    /// Create a MIN(column) selector
+    pub fn min(column: &str) -> Self {
+        Self::Aggregate {
+            function: AggregateFunction::Min,
+            column: column.to_string(),
+            alias: None,
+        }
+    }
+    
+    /// Create a MAX(column) selector
+    pub fn max(column: &str) -> Self {
+        Self::Aggregate {
+            function: AggregateFunction::Max,
+            column: column.to_string(),
+            alias: None,
+        }
+    }
+    
+    /// Add an alias to any selector
+    pub fn as_alias(mut self, alias: &str) -> Self {
+        match &mut self {
+            Self::Column(_) => {
+                // Convert to aggregate with alias (this is a simplification)
+                // In practice, we'd want a separate Column variant with alias
+                self
+            }
+            Self::Aggregate { alias: a, .. } => {
+                *a = Some(alias.to_string());
+                self
+            }
+            Self::CountAll { alias: a } => {
+                *a = Some(alias.to_string());
+                self
+            }
+        }
+    }
+    
+    /// Convert to SQL string
+    pub fn to_sql(&self) -> String {
+        match self {
+            Self::Column(name) => name.clone(),
+            Self::Aggregate { function, column, alias } => {
+                let func_sql = match function {
+                    AggregateFunction::CountDistinct => {
+                        format!("COUNT(DISTINCT {})", column)
+                    }
+                    _ => {
+                        format!("{}({})", function, column)
+                    }
+                };
+                
+                if let Some(alias) = alias {
+                    format!("{} AS {}", func_sql, alias)
+                } else {
+                    func_sql
+                }
+            }
+            Self::CountAll { alias } => {
+                let sql = "COUNT(*)".to_string();
+                if let Some(alias) = alias {
+                    format!("{} AS {}", sql, alias)
+                } else {
+                    sql
+                }
+            }
+        }
+    }
+}
+
 /// JOIN clause types
 #[derive(Debug, Clone, PartialEq)]
 pub enum JoinType {
@@ -137,11 +293,12 @@ pub struct GroupByClause {
 #[derive(Debug, Clone)]
 pub struct SelectBuilder {
     table_name: String,
-    selected_columns: Vec<String>,
+    selected_columns: Vec<ColumnSelector>,
     where_conditions: Vec<WhereCondition>,
     join_clauses: Vec<JoinClause>,
     order_by_clauses: Vec<OrderByClause>,
     group_by_clause: Option<GroupByClause>,
+    distinct: bool,
     limit_value: Option<u64>,
     offset_value: Option<u64>,
     parameters: Vec<Value>,
@@ -152,11 +309,12 @@ impl SelectBuilder {
     pub fn new(table: &str) -> Self {
         Self {
             table_name: table.to_string(),
-            selected_columns: vec!["*".to_string()],
+            selected_columns: vec![ColumnSelector::Column("*".to_string())],
             where_conditions: Vec::new(),
             join_clauses: Vec::new(),
             order_by_clauses: Vec::new(),
             group_by_clause: None,
+            distinct: false,
             limit_value: None,
             offset_value: None,
             parameters: Vec::new(),
@@ -173,15 +331,15 @@ impl SelectBuilder {
     /// ```
     pub fn select<T>(mut self, columns: T) -> Self
     where
-        T: IntoColumns,
+        T: IntoColumnSelectors,
     {
-        self.selected_columns = columns.into_columns();
+        self.selected_columns = columns.into_column_selectors();
         self
     }
     
     /// Select all columns (equivalent to SELECT *)
     pub fn select_all(mut self) -> Self {
-        self.selected_columns = vec!["*".to_string()];
+        self.selected_columns = vec![ColumnSelector::Column("*".to_string())];
         self
     }
     
@@ -417,6 +575,19 @@ impl SelectBuilder {
         });
         self
     }
+    
+    /// Add DISTINCT clause to eliminate duplicate rows
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::table;
+    /// 
+    /// let query = table("users").select("status").distinct();
+    /// ```
+    pub fn distinct(mut self) -> Self {
+        self.distinct = true;
+        self
+    }
 }
 
 impl QueryBuilder for SelectBuilder {
@@ -425,7 +596,11 @@ impl QueryBuilder for SelectBuilder {
         
         // SELECT clause
         sql.push_str("SELECT ");
-        sql.push_str(&self.selected_columns.join(", "));
+        if self.distinct {
+            sql.push_str("DISTINCT ");
+        }
+        let column_strs: Vec<String> = self.selected_columns.iter().map(|col| col.to_sql()).collect();
+        sql.push_str(&column_strs.join(", "));
         
         // FROM clause
         sql.push_str(" FROM ");
@@ -540,9 +715,70 @@ pub trait IntoColumns {
     fn into_columns(self) -> Vec<String>;
 }
 
+/// Trait for types that can be converted to column selectors
+pub trait IntoColumnSelectors {
+    fn into_column_selectors(self) -> Vec<ColumnSelector>;
+}
+
 impl IntoColumns for &str {
     fn into_columns(self) -> Vec<String> {
         vec![self.to_string()]
+    }
+}
+
+// IntoColumnSelectors implementations
+impl IntoColumnSelectors for &str {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![ColumnSelector::Column(self.to_string())]
+    }
+}
+
+impl IntoColumnSelectors for ColumnSelector {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![self]
+    }
+}
+
+impl IntoColumnSelectors for Vec<ColumnSelector> {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        self
+    }
+}
+
+// Tuple implementations for IntoColumnSelectors  
+impl IntoColumnSelectors for (&str,) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![ColumnSelector::Column(self.0.to_string())]
+    }
+}
+
+impl IntoColumnSelectors for (&str, &str) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            ColumnSelector::Column(self.0.to_string()),
+            ColumnSelector::Column(self.1.to_string())
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (&str, &str, &str) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            ColumnSelector::Column(self.0.to_string()),
+            ColumnSelector::Column(self.1.to_string()),
+            ColumnSelector::Column(self.2.to_string())
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (&str, &str, &str, &str) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            ColumnSelector::Column(self.0.to_string()),
+            ColumnSelector::Column(self.1.to_string()),
+            ColumnSelector::Column(self.2.to_string()),
+            ColumnSelector::Column(self.3.to_string())
+        ]
     }
 }
 
@@ -1391,5 +1627,252 @@ mod tests {
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY created_at ASC LIMIT 25 OFFSET 50");
+    }
+    
+    // DISTINCT operation tests
+    #[test]
+    fn test_distinct_basic() {
+        let query = SelectBuilder::new("users")
+            .select("status")
+            .distinct();
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT status FROM users");
+    }
+    
+    #[test]
+    fn test_distinct_multiple_columns() {
+        let query = SelectBuilder::new("users")
+            .select(("status", "role"))
+            .distinct();
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT status, role FROM users");
+    }
+    
+    #[test]
+    fn test_distinct_with_where() {
+        let query = SelectBuilder::new("users")
+            .select("department")
+            .distinct()
+            .where_(("active", true));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT department FROM users WHERE active = ?");
+    }
+    
+    #[test]
+    fn test_distinct_with_join() {
+        let query = SelectBuilder::new("users")
+            .select("users.role")
+            .distinct()
+            .inner_join("departments", "users.dept_id", "departments.id");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT users.role FROM users INNER JOIN departments ON users.dept_id = departments.id");
+    }
+    
+    #[test]
+    fn test_distinct_with_order_by() {
+        let query = SelectBuilder::new("users")
+            .select("status")
+            .distinct()
+            .order_by("status");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT status FROM users ORDER BY status ASC");
+    }
+    
+    #[test]
+    fn test_distinct_with_group_by() {
+        let query = SelectBuilder::new("orders")
+            .select("customer_id")
+            .distinct()
+            .group_by("customer_id");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT customer_id FROM orders GROUP BY customer_id");
+    }
+    
+    #[test]
+    fn test_distinct_with_limit() {
+        let query = SelectBuilder::new("users")
+            .select("department")
+            .distinct()
+            .limit(5);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT department FROM users LIMIT 5");
+    }
+    
+    #[test]
+    fn test_complex_distinct_query() {
+        let query = SelectBuilder::new("users")
+            .select(("users.department", "roles.name"))
+            .distinct()
+            .inner_join("user_roles", "users.id", "user_roles.user_id")
+            .inner_join("roles", "user_roles.role_id", "roles.id")
+            .where_(("users.active", true))
+            .and_where(("roles.active", true))
+            .order_by("users.department")
+            .order_by("roles.name")
+            .limit(20);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT users.department, roles.name FROM users INNER JOIN user_roles ON users.id = user_roles.user_id INNER JOIN roles ON user_roles.role_id = roles.id WHERE users.active = ? AND roles.active = ? ORDER BY users.department ASC, roles.name ASC LIMIT 20");
+    }
+    
+    #[test]
+    fn test_distinct_all_columns() {
+        let query = SelectBuilder::new("users")
+            .distinct();
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT * FROM users");
+    }
+    
+    // Aggregation function tests
+    #[test]
+    fn test_count_all() {
+        let query = SelectBuilder::new("users")
+            .select(ColumnSelector::count());
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT COUNT(*) FROM users");
+    }
+    
+    #[test]
+    fn test_count_all_with_alias() {
+        let query = SelectBuilder::new("users")
+            .select(ColumnSelector::count_as("total"));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT COUNT(*) AS total FROM users");
+    }
+    
+    #[test]
+    fn test_count_column() {
+        let query = SelectBuilder::new("users")
+            .select(ColumnSelector::count_column("id"));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT COUNT(id) FROM users");
+    }
+    
+    #[test]
+    fn test_count_distinct() {
+        let query = SelectBuilder::new("users")
+            .select(ColumnSelector::count_distinct("email"));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT COUNT(DISTINCT email) FROM users");
+    }
+    
+    #[test]
+    fn test_sum_function() {
+        let query = SelectBuilder::new("orders")
+            .select(ColumnSelector::sum("total"));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT SUM(total) FROM orders");
+    }
+    
+    #[test]
+    fn test_avg_function() {
+        let query = SelectBuilder::new("products")
+            .select(ColumnSelector::avg("price"));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT AVG(price) FROM products");
+    }
+    
+    #[test]
+    fn test_min_function() {
+        let query = SelectBuilder::new("products")
+            .select(ColumnSelector::min("price"));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT MIN(price) FROM products");
+    }
+    
+    #[test]
+    fn test_max_function() {
+        let query = SelectBuilder::new("products")
+            .select(ColumnSelector::max("price"));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT MAX(price) FROM products");
+    }
+    
+    #[test]
+    fn test_aggregation_with_alias() {
+        let query = SelectBuilder::new("orders")
+            .select(ColumnSelector::sum("total").as_alias("total_sales"));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT SUM(total) AS total_sales FROM orders");
+    }
+    
+    #[test]
+    fn test_mixed_columns_and_aggregations() {
+        let query = SelectBuilder::new("orders")
+            .select(vec![
+                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::count().as_alias("count"),
+                ColumnSelector::sum("total").as_alias("total_sales")
+            ]);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status, COUNT(*) AS count, SUM(total) AS total_sales FROM orders");
+    }
+    
+    #[test]
+    fn test_aggregation_with_group_by() {
+        let query = SelectBuilder::new("orders")
+            .select(vec![
+                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::count().as_alias("count"),
+                ColumnSelector::avg("total").as_alias("avg_total")
+            ])
+            .group_by("status");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status, COUNT(*) AS count, AVG(total) AS avg_total FROM orders GROUP BY status");
+    }
+    
+    #[test]
+    fn test_aggregation_with_joins() {
+        let query = SelectBuilder::new("users")
+            .select(vec![
+                ColumnSelector::Column("users.name".to_string()),
+                ColumnSelector::count().as_alias("order_count")
+            ])
+            .left_join("orders", "users.id", "orders.user_id")
+            .group_by("users.name");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT users.name, COUNT(*) AS order_count FROM users LEFT JOIN orders ON users.id = orders.user_id GROUP BY users.name");
+    }
+    
+    #[test]
+    fn test_complex_aggregation_query() {
+        let query = SelectBuilder::new("orders")
+            .select(vec![
+                ColumnSelector::Column("customer_id".to_string()),
+                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::count().as_alias("order_count"),
+                ColumnSelector::sum("total").as_alias("total_sales"),
+                ColumnSelector::avg("total").as_alias("avg_order_value"),
+                ColumnSelector::min("total").as_alias("min_order"),
+                ColumnSelector::max("total").as_alias("max_order")
+            ])
+            .where_(("status", "completed"))
+            .group_by(("customer_id", "status"))
+            .order_by("customer_id")
+            .order_by_desc("total_sales")
+            .limit(100);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT customer_id, status, COUNT(*) AS order_count, SUM(total) AS total_sales, AVG(total) AS avg_order_value, MIN(total) AS min_order, MAX(total) AS max_order FROM orders WHERE status = ? GROUP BY customer_id, status ORDER BY customer_id ASC, total_sales DESC LIMIT 100");
     }
 }
