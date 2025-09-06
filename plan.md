@@ -236,12 +236,71 @@ let result = archibald_raw!(
 ).fetch::<User>(&pool).await?;
 ```
 
+## Dependencies
+
+Archibald follows a minimal dependency approach, keeping the core lightweight while providing optional features:
+
+### Core Dependencies (Required)
+```toml
+[dependencies]
+# Core runtime
+tokio = { version = "1.0", features = ["rt", "macros"] }
+futures = "0.3"
+
+# Serialization  
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database foundation
+sqlx = { version = "0.7", features = ["runtime-tokio", "any"], default-features = false }
+
+# Error handling
+thiserror = "1.0"
+```
+
+### Optional Dependencies (Feature-gated)
+```toml
+# Database-specific types
+uuid = { version = "1.0", optional = true, features = ["v4", "serde"] }
+chrono = { version = "0.4", optional = true, default-features = false, features = ["serde"] }
+rust_decimal = { version = "1.0", optional = true, features = ["serde"] }
+
+[features]
+default = ["postgres"]
+
+# Database drivers
+postgres = ["sqlx/postgres"]
+mysql = ["sqlx/mysql"] 
+sqlite = ["sqlx/sqlite"]
+mssql = ["sqlx/mssql"]
+
+# Optional type support
+uuid-support = ["uuid"]
+datetime-support = ["chrono"]
+decimal-support = ["rust_decimal"]
+all-types = ["uuid-support", "datetime-support", "decimal-support"]
+```
+
+**Design Principles:**
+- **Minimal Core**: Only 6 essential dependencies for the base functionality
+- **Feature Gates**: Database drivers and type support are opt-in
+- **SQLx Foundation**: Leverage proven async database connectivity and connection pooling
+- **Pay for What You Use**: Users only include the features they need
+
+**Why SQLx?**
+- Proven async-first database abstraction
+- Multi-database support (PostgreSQL, MySQL, SQLite, MSSQL)
+- Built-in connection pooling and prepared statements
+- Type-safe query compilation (we can build on this)
+- Handles low-level database complexity
+
 ## Implementation Plan
 
 ### Phase 1: Core Foundation (Weeks 1-3)
 1. **Project Setup**
-   - Create Cargo workspace structure
-   - Create basic error types and result handling
+   - Create Cargo workspace structure with dependency configuration
+   - Set up CI/CD with GitHub Actions for multiple database testing
+   - Create basic error types and result handling with thiserror
 
 2. **Core Query Builder Structure**
    - Define `QueryBuilder` trait and basic implementations
@@ -250,9 +309,9 @@ let result = archibald_raw!(
    - Basic SQL generation without database-specific optimizations
 
 3. **Connection and Pool Management**
-   - Abstract connection pool interface
-   - Integration with `sqlx` for connection management
-   - Basic async execution framework
+   - Abstract connection pool interface over SQLx pools
+   - Integration with `sqlx::Pool` for connection management
+   - Basic async execution framework with tokio
 
 ### Phase 2: Select Queries (Weeks 4-6)
 1. **Basic SELECT Operations**
