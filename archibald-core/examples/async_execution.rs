@@ -1,4 +1,4 @@
-use archibald_core::{table, op, InsertBuilder, UpdateBuilder, DeleteBuilder};
+use archibald_core::{from, op, InsertBuilder, UpdateBuilder, DeleteBuilder};
 use archibald_core::{ConnectionPool, ExecutableQuery, ExecutableModification};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // SELECT queries with execution
     println!("1. Fetch all users:");
-    let users: Vec<User> = table("users")
+    let users: Vec<User> = from("users")
         .select(("id", "name", "email", "age"))
         .where_(("age", op::GT, 18))
         .fetch_all(&pool)
@@ -105,14 +105,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     println!("\n2. Fetch single user:");
-    let user: User = table("users")
+    let user: User = from("users")
         .where_(("id", 1))
         .fetch_one(&pool)
         .await?;
     println!("User: {} - {}", user.name, user.email);
     
     println!("\n3. Fetch optional user:");
-    let maybe_user: Option<User> = table("users")
+    let maybe_user: Option<User> = from("users")
         .where_(("id", 999))
         .fetch_optional(&pool)
         .await?;
@@ -159,7 +159,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Complex query with multiple conditions
     println!("\n7. Complex query:");
-    let active_users: Vec<User> = table("users")
+    let active_users: Vec<User> = from("users")
         .select(("id", "name", "email", "age"))
         .where_(("age", op::GTE, 21))
         .and_where(("status", "active"))
@@ -175,10 +175,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n8. Subquery Examples:");
     
     // WHERE IN subquery
-    let active_users: Vec<User> = table("users")
+    let active_users: Vec<User> = from("users")
         .select(("id", "name", "email", "age"))
         .where_in("id",
-            table("orders")
+            from("orders")
                 .select("user_id") 
                 .where_(("status", "completed"))
                 .where_(("created_at", op::GT, "2024-01-01"))
@@ -189,10 +189,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Found {} users with completed orders", active_users.len());
     
     // EXISTS subquery
-    let users_with_posts: Vec<User> = table("users") 
+    let users_with_posts: Vec<User> = from("users") 
         .select(("id", "name", "email", "age"))
         .where_exists(
-            table("posts")
+            from("posts")
                 .select("1")
                 .where_(("posts.author_id", "users.id"))
                 .where_(("posts.published", true))

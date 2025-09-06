@@ -52,9 +52,9 @@ const users = await knex('users')
 
 **Archibald:**
 ```rust
-use archibald_core::{table, op};
+use archibald_core::{from, op};
 
-let users: Vec<User> = table("users")
+let users: Vec<User> = from("users")
     .select(("id", "name", "email"))
     .where_(("age", op::GT, 18))
     .where_(("status", "active"))
@@ -75,7 +75,7 @@ const users = await knex('users')
 
 **Archibald:**
 ```rust
-let users: Vec<User> = table("users")
+let users: Vec<User> = from("users")
     .where_(("age", op::GTE, 21))
     .where_(("name", "LIKE", "%john%"))
     .where_(("verified", true))
@@ -94,7 +94,7 @@ const users = await knex('users')
 
 **Archibald:**
 ```rust
-let users: Vec<User> = table("users")
+let users: Vec<User> = from("users")
     .where_(("role", "admin"))
     .or_where(("status", "premium"))
     .fetch_all(&pool)
@@ -115,7 +115,7 @@ const results = await knex('users')
 
 **Archibald:**
 ```rust
-let results = table("users")
+let results = from("users")
     .select(("users.name", "posts.title"))
     .inner_join("posts", "users.id", "posts.user_id")
     .where_(("users.active", true))
@@ -140,7 +140,7 @@ const userStats = await knex('users')
 ```rust
 use archibald_core::ColumnSelector;
 
-let user_stats = table("users")
+let user_stats = from("users")
     .select((
         "users.name",
         ColumnSelector::count().as_alias("post_count"),
@@ -171,10 +171,10 @@ const activeUsers = await knex('users')
 
 **Archibald:**
 ```rust
-let active_users: Vec<User> = table("users")
+let active_users: Vec<User> = from("users")
     .select(("id", "name"))
     .where_in("id",
-        table("orders")
+        from("orders")
             .select("user_id")
             .where_(("status", "completed"))
             .where_(("created_at", op::GT, "2024-01-01"))
@@ -199,10 +199,10 @@ const usersWithPosts = await knex('users')
 
 **Archibald:**
 ```rust
-let users_with_posts: Vec<User> = table("users")
+let users_with_posts: Vec<User> = from("users")
     .select(("id", "name"))
     .where_exists(
-        table("posts")
+        from("posts")
             .select("1")
             .where_(("posts.user_id", "users.id"))
             .where_(("posts.published", true))

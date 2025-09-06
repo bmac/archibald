@@ -20,6 +20,6 @@ pub use executor::{
 };
 
 /// Create a new query builder for the given table
-pub fn table(name: &str) -> SelectBuilder {
+pub fn from(name: &str) -> SelectBuilder {
     SelectBuilder::new(name)
 }

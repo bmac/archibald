@@ -425,9 +425,9 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::table;
+    /// use archibald_core::from;
     /// 
-    /// let query = table("users").select(("id", "name", "email"));
+    /// let query = from("users").select(("id", "name", "email"));
     /// ```
     pub fn select<T>(mut self, columns: T) -> Self
     where
@@ -447,9 +447,9 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::{table, op};
+    /// use archibald_core::{from, op};
     /// 
-    /// let query = table("users")
+    /// let query = from("users")
     ///     .where_(("age", op::GT, 18))
     ///     .where_(("name", "John"));
     /// ```
@@ -512,9 +512,9 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::table;
+    /// use archibald_core::from;
     /// 
-    /// let query = table("users")
+    /// let query = from("users")
     ///     .inner_join("posts", "users.id", "posts.user_id");
     /// ```
     pub fn inner_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
@@ -590,9 +590,9 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::{table, JoinType, op};
+    /// use archibald_core::{from, JoinType, op};
     /// 
-    /// let query = table("users")
+    /// let query = from("users")
     ///     .join(JoinType::Left, "profiles", "users.id", op::EQ, "profiles.user_id");
     /// ```
     pub fn join<O>(mut self, join_type: JoinType, table: &str, left_col: &str, operator: O, right_col: &str) -> Self
@@ -616,9 +616,9 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::table;
+    /// use archibald_core::from;
     /// 
-    /// let query = table("users").order_by("name");
+    /// let query = from("users").order_by("name");
     /// ```
     pub fn order_by(mut self, column: &str) -> Self {
         self.order_by_clauses.push(OrderByClause {
@@ -632,9 +632,9 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::table;
+    /// use archibald_core::from;
     /// 
-    /// let query = table("users").order_by_desc("created_at");
+    /// let query = from("users").order_by_desc("created_at");
     /// ```
     pub fn order_by_desc(mut self, column: &str) -> Self {
         self.order_by_clauses.push(OrderByClause {
@@ -648,9 +648,9 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::{table, SortDirection};
+    /// use archibald_core::{from, SortDirection};
     /// 
-    /// let query = table("users").order_by_with_direction("name", SortDirection::Desc);
+    /// let query = from("users").order_by_with_direction("name", SortDirection::Desc);
     /// ```
     pub fn order_by_with_direction(mut self, column: &str, direction: SortDirection) -> Self {
         self.order_by_clauses.push(OrderByClause {
@@ -664,9 +664,9 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::table;
+    /// use archibald_core::from;
     /// 
-    /// let query = table("orders").group_by(("customer_id", "status"));
+    /// let query = from("orders").group_by(("customer_id", "status"));
     /// ```
     pub fn group_by<C>(mut self, columns: C) -> Self 
     where 
@@ -682,9 +682,9 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::table;
+    /// use archibald_core::from;
     /// 
-    /// let query = table("users").select("status").distinct();
+    /// let query = from("users").select("status").distinct();
     /// ```
     pub fn distinct(mut self) -> Self {
         self.distinct = true;
@@ -695,9 +695,9 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::{table, ColumnSelector, op};
+    /// use archibald_core::{from, ColumnSelector, op};
     /// 
-    /// let query = table("orders")
+    /// let query = from("orders")
     ///     .select(vec![
     ///         ColumnSelector::Column("status".to_string()),
     ///         ColumnSelector::count().as_alias("count")
@@ -756,10 +756,10 @@ impl SelectBuilder {
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::table;
+    /// use archibald_core::from;
     /// 
-    /// let subquery = table("orders").select("customer_id").where_(("status", "active"));
-    /// let query = table("customers").where_in("id", subquery);
+    /// let subquery = from("orders").select("customer_id").where_(("status", "active"));
+    /// let query = from("customers").where_in("id", subquery);
     /// ```
     pub fn where_in(mut self, column: &str, subquery: SelectBuilder) -> Self {
         let subquery_wrapper = Subquery::new(subquery);

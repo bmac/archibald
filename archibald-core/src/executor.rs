@@ -645,10 +645,10 @@ pub mod postgres {
         #[test]
         fn test_query_with_parameters_integration() {
             // Test that our query builder properly passes parameters to the executor
-            use crate::{table, builder::QueryBuilder, op};
+            use crate::{from, builder::QueryBuilder, op};
             
             // Build a query with parameters
-            let query = table("users")
+            let query = from("users")
                 .select(("id", "name", "email"))
                 .where_(("age", op::GT, 18))
                 .where_(("status", "active"))
@@ -860,7 +860,7 @@ pub mod postgres {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{table, op};
+    use crate::{from, op};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
     
@@ -965,7 +965,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_fetch_all() {
         let pool = MockPool::new();
-        let query = table("users")
+        let query = from("users")
             .select(("id", "name", "email"))
             .where_(("age", op::GT, 18));
             
@@ -978,7 +978,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_fetch_one() {
         let pool = MockPool::new();
-        let query = table("users").where_(("id", 1));
+        let query = from("users").where_(("id", 1));
         
         let user: User = query.fetch_one(&pool).await.unwrap();
         assert_eq!(user.id, 1);
@@ -988,7 +988,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_fetch_optional() {
         let pool = MockPool::new();
-        let query = table("users").where_(("id", 1));
+        let query = from("users").where_(("id", 1));
         
         let user: Option<User> = query.fetch_optional(&pool).await.unwrap();
         assert!(user.is_some());
@@ -1038,7 +1038,7 @@ mod tests {
     #[tokio::test]
     async fn test_connection_failure() {
         let pool = MockPool::with_failure();
-        let query = table("users");
+        let query = from("users");
         
         let result: Result<Vec<User>> = query.fetch_all(&pool).await;
         assert!(result.is_err());

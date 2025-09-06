@@ -1,12 +1,12 @@
-use archibald_core::{table, op, InsertBuilder, UpdateBuilder, DeleteBuilder, QueryBuilder};
-use archibald_core::{ColumnSelector, AggregateFunction, SortDirection};
+use archibald_core::{from, op, InsertBuilder, UpdateBuilder, DeleteBuilder, QueryBuilder};
+use archibald_core::{ColumnSelector, SortDirection};
 use std::collections::HashMap;
 
 fn main() {
     println!("=== Archibald Core - Basic Usage Examples ===\n");
     
     // SELECT with clean where syntax
-    let select_query = table("users")
+    let select_query = from("users")
         .select(("id", "name", "email"))
         .where_(("age", op::GT, 18))        // Using op constants
         .where_(("status", "active"))       // Defaults to EQ
@@ -19,10 +19,10 @@ fn main() {
     println!("   Parameters: {:?}\n", select_query.parameters());
     
     // Subqueries - WHERE IN
-    let subquery_in = table("users")
+    let subquery_in = from("users")
         .select(("id", "name"))
         .where_in("id", 
-            table("orders")
+            from("orders")
                 .select("user_id")
                 .where_(("status", "completed"))
                 .where_(("created_at", op::GT, "2024-01-01"))
@@ -32,10 +32,10 @@ fn main() {
     println!("   SQL: {}", subquery_in.to_sql().unwrap());
     
     // Subqueries - EXISTS
-    let subquery_exists = table("users")
+    let subquery_exists = from("users")
         .select(("id", "name", "email"))
         .where_exists(
-            table("posts")
+            from("posts")
                 .select("1")
                 .where_(("posts.author_id", "users.id"))
                 .where_(("posts.published", true))
@@ -45,7 +45,7 @@ fn main() {
     println!();
     
     // JOINs with aggregations
-    let join_query = table("users")
+    let join_query = from("users")
         .select((
             "users.name",
             ColumnSelector::count().as_alias("post_count"),
@@ -97,7 +97,7 @@ fn main() {
     println!("   Parameters: {:?}\n", delete_query.parameters());
     
     // Custom operators for advanced database features
-    let postgres_fts_query = table("documents")
+    let postgres_fts_query = from("documents")
         .select(("title", "content"))
         .where_(("content", archibald_core::Operator::custom("@@"), "search & query"))
         .limit(20);
@@ -107,7 +107,7 @@ fn main() {
     println!();
     
     // Complex WHERE conditions
-    let complex_query = table("users")
+    let complex_query = from("users")
         .where_(("age", op::GTE, 18))     // First condition
         .and_where(("status", "active"))  // Explicit AND (same as where_)
         .or_where(("role", "admin"))      // Explicit OR
@@ -119,7 +119,7 @@ fn main() {
     
     // Deferred validation example
     println!("9. Deferred Validation:");
-    let invalid_query = table("users").where_(("age", "INVALID_OPERATOR", 18));
+    let invalid_query = from("users").where_(("age", "INVALID_OPERATOR", 18));
     
     match invalid_query.to_sql() {
         Ok(sql) => println!("   Unexpected success: {}", sql),

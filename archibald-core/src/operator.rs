@@ -184,10 +184,10 @@ mod tests {
     
     #[test]
     fn test_deferred_validation_in_query() {
-        use crate::{table, builder::QueryBuilder};
+        use crate::{from, builder::QueryBuilder};
         
         // Creating a query with invalid operator should not panic
-        let query = table("users").where_(("age", "INVALID_OP", 18));
+        let query = from("users").where_(("age", "INVALID_OP", 18));
         
         // But generating SQL should fail
         assert!(query.to_sql().is_err());

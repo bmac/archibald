@@ -33,7 +33,7 @@ serde = { version = "1.0", features = ["derive"] }
 ## 📖 Basic Usage
 
 ```rust
-use archibald_core::{table, op, transaction};
+use archibald_core::{from, op, transaction};
 use archibald_core::executor::postgres::PostgresPool;
 use serde::{Deserialize, Serialize};
 
@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = PostgresPool::new("postgresql://user:password@localhost/mydb").await?;
     
     // SELECT query
-    let users: Vec<User> = table("users")
+    let users: Vec<User> = from("users")
         .select(("id", "name", "email", "age"))
         .where_(("age", op::GT, 18))
         .where_(("status", "active"))
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### SELECT with WHERE conditions
 ```rust
-let adults = table("users")
+let adults = from("users")
     .select(("id", "name", "email"))
     .where_(("age", op::GTE, 18))           // age >= 18
     .where_(("status", "active"))           // status = 'active' (defaults to EQ)
@@ -79,7 +79,7 @@ let adults = table("users")
 
 ### JOINs and aggregations
 ```rust
-let user_stats = table("users")
+let user_stats = from("users")
     .select((
         "users.name",
         ColumnSelector::count().as_alias("post_count"),
@@ -97,10 +97,10 @@ let user_stats = table("users")
 ### Subqueries
 ```rust
 // WHERE IN subquery
-let active_commenters = table("users")
+let active_commenters = from("users")
     .select(("id", "name"))
     .where_in("id", 
-        table("comments")
+        from("comments")
             .select("user_id")
             .where_(("created_at", op::GT, "2024-01-01"))
     )
@@ -108,10 +108,10 @@ let active_commenters = table("users")
     .await?;
 
 // EXISTS subquery
-let users_with_orders = table("users")
+let users_with_orders = from("users")
     .select(("id", "name"))
     .where_exists(
-        table("orders")
+        from("orders")
             .select("1")
             .where_(("orders.user_id", "users.id"))
     )
@@ -224,14 +224,14 @@ txn.commit().await?;
 ### Custom operators for database-specific features
 ```rust
 // PostgreSQL full-text search
-let documents = table("articles")
+let documents = from("articles")
     .select(("id", "title"))
     .where_(("content", Operator::custom("@@"), "search & query"))
     .fetch_all(&pool)
     .await?;
 
 // PostGIS distance queries
-let nearby = table("locations")
+let nearby = from("locations")
     .select(("id", "name"))
     .where_(("coordinates", Operator::custom("<->"), point))
     .limit(10)
@@ -242,7 +242,7 @@ let nearby = table("locations")
 ### Deferred validation
 ```rust
 // Build queries without Result handling
-let query = table("users")
+let query = from("users")
     .where_(("age", "INVALID_OPERATOR", 18))  // Stored, not validated yet
     .where_(("name", "John"));
 
@@ -263,7 +263,7 @@ Archibald prevents SQL injection through:
 
 ```rust
 // ✅ Safe - parameters are automatically bound
-let users = table("users")
+let users = from("users")
     .where_(("name", user_input))        // Automatically parameterized as $1
     .where_(("age", op::GT, min_age))    // Automatically parameterized as $2
     .fetch_all(&pool)
