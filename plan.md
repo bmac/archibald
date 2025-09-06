@@ -241,8 +241,6 @@ let result = archibald_raw!(
 ### Phase 1: Core Foundation (Weeks 1-3)
 1. **Project Setup**
    - Create Cargo workspace structure
-   - Set up CI/CD with GitHub Actions  
-   - Define core dependencies (tokio, sqlx, serde, etc.)
    - Create basic error types and result handling
 
 2. **Core Query Builder Structure**
@@ -375,11 +373,69 @@ The library will include comprehensive migration documentation showing equivalen
 
 ## Trait-Based Where Conditions API
 
-The elegant `where((...))` syntax is achieved through a trait-based approach:
+The elegant `where((...))` syntax is achieved through a trait-based approach with type-safe operators:
 
 ```rust
+// Type-safe operator struct
+#[derive(Debug, Clone, PartialEq)]
+pub struct Operator(&'static str);
+
+impl Operator {
+    pub const GT: Self = Operator(">");
+    pub const LT: Self = Operator("<");
+    pub const EQ: Self = Operator("=");
+    pub const NEQ: Self = Operator("!=");
+    pub const GTE: Self = Operator(">=");
+    pub const LTE: Self = Operator("<=");
+    pub const LIKE: Self = Operator("LIKE");
+    pub const ILIKE: Self = Operator("ILIKE");
+    pub const IN: Self = Operator("IN");
+    pub const NOT_IN: Self = Operator("NOT IN");
+    pub const IS_NULL: Self = Operator("IS NULL");
+    pub const IS_NOT_NULL: Self = Operator("IS NOT NULL");
+    
+    // Escape hatch for custom operators
+    pub const fn custom(op: &'static str) -> Self {
+        Operator(op)
+    }
+}
+
+// Trait to convert various types to operators
+pub trait IntoOperator {
+    fn into_operator(self) -> Operator;
+}
+
+impl IntoOperator for Operator {
+    fn into_operator(self) -> Operator {
+        self
+    }
+}
+
+// Allow string literals for common SQL operators (with validation)
+impl IntoOperator for &str {
+    fn into_operator(self) -> Operator {
+        match self {
+            ">" => Operator::GT,
+            "<" => Operator::LT,
+            "=" => Operator::EQ,
+            "!=" => Operator::NEQ,
+            ">=" => Operator::GTE,
+            "<=" => Operator::LTE,
+            "LIKE" | "like" => Operator::LIKE,
+            "ILIKE" | "ilike" => Operator::ILIKE,
+            "IN" | "in" => Operator::IN,
+            "NOT IN" | "not in" => Operator::NOT_IN,
+            _ => panic!(
+                "Unknown operator '{}'. Use op::{} constants or Operator::custom(\"{}\") for custom operators.", 
+                self, self.to_uppercase().replace(" ", "_"), self
+            )
+        }
+    }
+}
+
+// Condition trait for where clauses
 pub trait IntoCondition {
-    fn into_condition(self) -> (String, String, Value);
+    fn into_condition(self) -> (String, Operator, Value);
 }
 
 // For shorthand equality: where(("age", 18))
@@ -387,18 +443,19 @@ impl<T> IntoCondition for (&str, T)
 where 
     T: Into<Value>
 {
-    fn into_condition(self) -> (String, String, Value) {
-        (self.0.to_string(), "=".to_string(), self.1.into())
+    fn into_condition(self) -> (String, Operator, Value) {
+        (self.0.to_string(), Operator::EQ, self.1.into())
     }
 }
 
-// For explicit operators: where(("age", op::GT, 18))
-impl<T> IntoCondition for (&str, &str, T) 
+// For explicit operators: where(("age", op::GT, 18)) or where(("age", ">", 18))
+impl<T, O> IntoCondition for (&str, O, T) 
 where 
-    T: Into<Value>
+    T: Into<Value>,
+    O: IntoOperator
 {
-    fn into_condition(self) -> (String, String, Value) {
-        (self.0.to_string(), self.1.to_string(), self.2.into())
+    fn into_condition(self) -> (String, Operator, Value) {
+        (self.0.to_string(), self.1.into_operator(), self.2.into())
     }
 }
 
@@ -420,23 +477,31 @@ impl QueryBuilder {
 use archibald::op;
 
 archibald::table("users")
-    .where(("age", op::GT, 18))           // Explicit operator
+    .where(("age", op::GT, 18))           // Using op constants
+    .where(("score", ">", 100))           // Using string literals (validated)
     .where(("name", "John"))              // Defaults to EQ
     .where(("status", op::IN, &["active", "pending"]))  // IN clause
-    .where(("email", op::LIKE, "%@gmail.com"))          // LIKE pattern
+    .where(("email", "LIKE", "%@gmail.com"))            // LIKE pattern
+
+// Custom operators for advanced use cases:
+archibald::table("documents")
+    .where(("content", Operator::custom("@@"), "search term"))  // PostgreSQL full-text search
+    .where(("location", Operator::custom("<->"), point))        // PostGIS distance operator
 
 // Chained where() calls are implicitly AND'd together
-// For OR conditions, you could also support:
+// For OR conditions:
 archibald::table("users")
-    .where(("age", op::GT, 18))
+    .where(("age", ">", 18))
     .or_where(("status", "admin"))        // Explicit OR
     .and_where(("active", true))          // Explicit AND (same as .where())
 ```
 
 **Benefits:**
-- **Type Safety**: Only valid condition tuples compile
-- **Familiar Syntax**: Close to knex's `where('column', 'op', value)`
-- **Flexible**: Supports both explicit operators and shorthand equality
-- **Extensible**: Easy to add new condition types via trait implementations
+- **Type Safety**: Only valid operators compile or run (panics on invalid strings)
+- **Familiar Syntax**: `where(("age", ">", 18))` reads like SQL and knex
+- **Flexible**: Supports constants (`op::GT`), strings (`">"`), and shorthand equality
+- **Extensible**: `Operator::custom()` escape hatch for database-specific operators
+- **Performance**: Zero-cost operator constants, validated strings panic early
+- **Clear Errors**: Helpful panic messages suggest correct alternatives
 
 This plan creates a Rust query builder that feels familiar to knex.js users while leveraging Rust's unique advantages for better safety, performance, and developer experience.
