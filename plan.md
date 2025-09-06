@@ -392,7 +392,6 @@ all-types = ["uuid-support", "datetime-support", "decimal-support"]
 
 2. **Ecosystem Integration**
    - Serde integration examples
-   - Web framework integration (axum, warp, actix)
    - Testing utilities
    - Example applications
 

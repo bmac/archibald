@@ -289,6 +289,15 @@ pub struct GroupByClause {
     pub columns: Vec<String>,
 }
 
+/// HAVING condition (similar to WHERE but for aggregated results)
+#[derive(Debug, Clone, PartialEq)]
+pub struct HavingCondition {
+    pub column_or_function: String,
+    pub operator: Operator,
+    pub value: Value,
+    pub connector: WhereConnector,
+}
+
 /// SELECT query builder
 #[derive(Debug, Clone)]
 pub struct SelectBuilder {
@@ -298,6 +307,7 @@ pub struct SelectBuilder {
     join_clauses: Vec<JoinClause>,
     order_by_clauses: Vec<OrderByClause>,
     group_by_clause: Option<GroupByClause>,
+    having_conditions: Vec<HavingCondition>,
     distinct: bool,
     limit_value: Option<u64>,
     offset_value: Option<u64>,
@@ -314,6 +324,7 @@ impl SelectBuilder {
             join_clauses: Vec::new(),
             order_by_clauses: Vec::new(),
             group_by_clause: None,
+            having_conditions: Vec::new(),
             distinct: false,
             limit_value: None,
             offset_value: None,
@@ -588,6 +599,67 @@ impl SelectBuilder {
         self.distinct = true;
         self
     }
+    
+    /// Add a HAVING condition for aggregated results
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::{table, ColumnSelector, op};
+    /// 
+    /// let query = table("orders")
+    ///     .select(vec![
+    ///         ColumnSelector::Column("status".to_string()),
+    ///         ColumnSelector::count().as_alias("count")
+    ///     ])
+    ///     .group_by("status")
+    ///     .having(("COUNT(*)", op::GT, 5));
+    /// ```
+    pub fn having<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        self.having_conditions.push(HavingCondition {
+            column_or_function: column,
+            operator,
+            value,
+            connector: WhereConnector::And,
+        });
+        self.parameters.push(self.having_conditions.last().unwrap().value.clone());
+        self
+    }
+    
+    /// Add an AND HAVING condition
+    pub fn and_having<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        self.having_conditions.push(HavingCondition {
+            column_or_function: column,
+            operator,
+            value,
+            connector: WhereConnector::And,
+        });
+        self.parameters.push(self.having_conditions.last().unwrap().value.clone());
+        self
+    }
+    
+    /// Add an OR HAVING condition
+    pub fn or_having<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        self.having_conditions.push(HavingCondition {
+            column_or_function: column,
+            operator,
+            value,
+            connector: WhereConnector::Or,
+        });
+        self.parameters.push(self.having_conditions.last().unwrap().value.clone());
+        self
+    }
 }
 
 impl QueryBuilder for SelectBuilder {
@@ -672,6 +744,34 @@ impl QueryBuilder for SelectBuilder {
         if let Some(group_by) = &self.group_by_clause {
             sql.push_str(" GROUP BY ");
             sql.push_str(&group_by.columns.join(", "));
+        }
+        
+        // HAVING clause
+        if !self.having_conditions.is_empty() {
+            sql.push_str(" HAVING ");
+            
+            for (i, condition) in self.having_conditions.iter().enumerate() {
+                if i > 0 {
+                    match condition.connector {
+                        WhereConnector::And => sql.push_str(" AND "),
+                        WhereConnector::Or => sql.push_str(" OR "),
+                    }
+                }
+                
+                sql.push_str(&condition.column_or_function);
+                sql.push(' ');
+                sql.push_str(condition.operator.as_str());
+                
+                // For array values, use IN syntax
+                if let Value::Array(_) = condition.value {
+                    sql.push_str(" (");
+                    // TODO: Handle parameter placeholders properly
+                    sql.push_str("?");
+                    sql.push(')');
+                } else {
+                    sql.push_str(" ?");
+                }
+            }
         }
         
         // ORDER BY clause
@@ -1874,5 +1974,173 @@ mod tests {
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT customer_id, status, COUNT(*) AS order_count, SUM(total) AS total_sales, AVG(total) AS avg_order_value, MIN(total) AS min_order, MAX(total) AS max_order FROM orders WHERE status = ? GROUP BY customer_id, status ORDER BY customer_id ASC, total_sales DESC LIMIT 100");
+    }
+    
+    // HAVING clause tests
+    #[test]
+    fn test_having_basic() {
+        let query = SelectBuilder::new("orders")
+            .select(vec![
+                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::count().as_alias("count")
+            ])
+            .group_by("status")
+            .having(("COUNT(*)", op::GT, 5));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status, COUNT(*) AS count FROM orders GROUP BY status HAVING COUNT(*) > ?");
+    }
+    
+    #[test]
+    fn test_having_with_sum() {
+        let query = SelectBuilder::new("sales")
+            .select(vec![
+                ColumnSelector::Column("region".to_string()),
+                ColumnSelector::sum("amount").as_alias("total_sales")
+            ])
+            .group_by("region")
+            .having(("SUM(amount)", op::GTE, 10000));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT region, SUM(amount) AS total_sales FROM sales GROUP BY region HAVING SUM(amount) >= ?");
+    }
+    
+    #[test]
+    fn test_having_with_avg() {
+        let query = SelectBuilder::new("products")
+            .select(vec![
+                ColumnSelector::Column("category".to_string()),
+                ColumnSelector::avg("price").as_alias("avg_price")
+            ])
+            .group_by("category")
+            .having(("AVG(price)", op::LT, 100.0));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT category, AVG(price) AS avg_price FROM products GROUP BY category HAVING AVG(price) < ?");
+    }
+    
+    #[test]
+    fn test_multiple_having_conditions() {
+        let query = SelectBuilder::new("orders")
+            .select(vec![
+                ColumnSelector::Column("customer_id".to_string()),
+                ColumnSelector::count().as_alias("order_count"),
+                ColumnSelector::sum("total").as_alias("total_spent")
+            ])
+            .group_by("customer_id")
+            .having(("COUNT(*)", op::GT, 3))
+            .and_having(("SUM(total)", op::GTE, 500));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT customer_id, COUNT(*) AS order_count, SUM(total) AS total_spent FROM orders GROUP BY customer_id HAVING COUNT(*) > ? AND SUM(total) >= ?");
+    }
+    
+    #[test]
+    fn test_having_with_or_condition() {
+        let query = SelectBuilder::new("products")
+            .select(vec![
+                ColumnSelector::Column("category".to_string()),
+                ColumnSelector::count().as_alias("product_count"),
+                ColumnSelector::avg("price").as_alias("avg_price")
+            ])
+            .group_by("category")
+            .having(("COUNT(*)", op::GT, 10))
+            .or_having(("AVG(price)", op::LT, 50));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT category, COUNT(*) AS product_count, AVG(price) AS avg_price FROM products GROUP BY category HAVING COUNT(*) > ? OR AVG(price) < ?");
+    }
+    
+    #[test]
+    fn test_having_with_where_and_group_by() {
+        let query = SelectBuilder::new("orders")
+            .select(vec![
+                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::count().as_alias("count"),
+                ColumnSelector::sum("total").as_alias("total_sales")
+            ])
+            .where_(("created_at", op::GTE, "2023-01-01"))
+            .group_by("status")
+            .having(("COUNT(*)", op::GT, 5));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status, COUNT(*) AS count, SUM(total) AS total_sales FROM orders WHERE created_at >= ? GROUP BY status HAVING COUNT(*) > ?");
+    }
+    
+    #[test]
+    fn test_having_with_joins() {
+        let query = SelectBuilder::new("users")
+            .select(vec![
+                ColumnSelector::Column("users.department".to_string()),
+                ColumnSelector::count().as_alias("user_count"),
+                ColumnSelector::avg("salaries.amount").as_alias("avg_salary")
+            ])
+            .inner_join("salaries", "users.id", "salaries.user_id")
+            .group_by("users.department")
+            .having(("COUNT(*)", op::GTE, 5))
+            .and_having(("AVG(salaries.amount)", op::GT, 75000));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT users.department, COUNT(*) AS user_count, AVG(salaries.amount) AS avg_salary FROM users INNER JOIN salaries ON users.id = salaries.user_id GROUP BY users.department HAVING COUNT(*) >= ? AND AVG(salaries.amount) > ?");
+    }
+    
+    #[test]
+    fn test_having_with_order_by() {
+        let query = SelectBuilder::new("products")
+            .select(vec![
+                ColumnSelector::Column("category".to_string()),
+                ColumnSelector::count().as_alias("product_count"),
+                ColumnSelector::max("price").as_alias("max_price")
+            ])
+            .group_by("category")
+            .having(("COUNT(*)", op::GT, 5))
+            .order_by("product_count")
+            .order_by_desc("max_price");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT category, COUNT(*) AS product_count, MAX(price) AS max_price FROM products GROUP BY category HAVING COUNT(*) > ? ORDER BY product_count ASC, max_price DESC");
+    }
+    
+    #[test]
+    fn test_complex_having_query() {
+        let query = SelectBuilder::new("sales")
+            .select(vec![
+                ColumnSelector::Column("region".to_string()),
+                ColumnSelector::Column("quarter".to_string()),
+                ColumnSelector::count().as_alias("sale_count"),
+                ColumnSelector::sum("amount").as_alias("total_sales"),
+                ColumnSelector::avg("amount").as_alias("avg_sale"),
+                ColumnSelector::min("amount").as_alias("min_sale"),
+                ColumnSelector::max("amount").as_alias("max_sale")
+            ])
+            .inner_join("products", "sales.product_id", "products.id")
+            .where_(("sales.date", op::GTE, "2023-01-01"))
+            .and_where(("products.active", true))
+            .group_by(("region", "quarter"))
+            .having(("COUNT(*)", op::GT, 10))
+            .and_having(("SUM(amount)", op::GTE, 50000))
+            .or_having(("AVG(amount)", op::GT, 1000))
+            .order_by("region")
+            .order_by("quarter")
+            .order_by_desc("total_sales")
+            .limit(20);
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT region, quarter, COUNT(*) AS sale_count, SUM(amount) AS total_sales, AVG(amount) AS avg_sale, MIN(amount) AS min_sale, MAX(amount) AS max_sale FROM sales INNER JOIN products ON sales.product_id = products.id WHERE sales.date >= ? AND products.active = ? GROUP BY region, quarter HAVING COUNT(*) > ? AND SUM(amount) >= ? OR AVG(amount) > ? ORDER BY region ASC, quarter ASC, total_sales DESC LIMIT 20");
+    }
+    
+    #[test]
+    fn test_having_count_distinct() {
+        let query = SelectBuilder::new("orders")
+            .select(vec![
+                ColumnSelector::Column("region".to_string()),
+                ColumnSelector::count_distinct("customer_id").as_alias("unique_customers"),
+                ColumnSelector::sum("total").as_alias("total_sales")
+            ])
+            .group_by("region")
+            .having(("COUNT(DISTINCT customer_id)", op::GT, 100));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT region, COUNT(DISTINCT customer_id) AS unique_customers, SUM(total) AS total_sales FROM orders GROUP BY region HAVING COUNT(DISTINCT customer_id) > ?");
     }
 }
