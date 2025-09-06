@@ -172,6 +172,75 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("Found {} active users", active_users.len());
     
+    println!("\n8. Subquery Examples:");
+    
+    // WHERE IN subquery
+    let active_users: Vec<User> = table("users")
+        .select(("id", "name", "email", "age"))
+        .where_in("id",
+            table("orders")
+                .select("user_id") 
+                .where_(("status", "completed"))
+                .where_(("created_at", op::GT, "2024-01-01"))
+        )
+        .fetch_all(&pool)
+        .await?;
+    
+    println!("Found {} users with completed orders", active_users.len());
+    
+    // EXISTS subquery
+    let users_with_posts: Vec<User> = table("users") 
+        .select(("id", "name", "email", "age"))
+        .where_exists(
+            table("posts")
+                .select("1")
+                .where_(("posts.author_id", "users.id"))
+                .where_(("posts.published", true))
+        )
+        .fetch_all(&pool)
+        .await?;
+        
+    println!("Found {} users with published posts", users_with_posts.len());
+    
+    println!("\n9. Transaction Example:");
+    
+    // Simple transaction (Note: MockPool doesn't implement TransactionalPool)
+    // In production, you would use PostgresPool which supports transactions:
+    /*
+    use archibald_core::{transaction, executor::postgres::PostgresPool};
+    
+    let pg_pool = PostgresPool::new("postgresql://...").await?;
+    
+    let user_id = transaction(&pg_pool, |txn| async move {
+        // Insert user
+        let user_id = InsertBuilder::new("users")
+            .insert(user_data)
+            .execute_tx(txn)
+            .await? as i32;
+        
+        // Insert user profile
+        let mut profile_data = HashMap::new();
+        profile_data.insert("user_id".to_string(), user_id.into());
+        profile_data.insert("bio".to_string(), "New user".into());
+        
+        InsertBuilder::new("user_profiles")
+            .insert(profile_data)
+            .execute_tx(txn)
+            .await?;
+            
+        Ok::<i32, Error>(user_id)
+    }).await?;
+    
+    println!("Created user with ID: {}", user_id);
+    */
+    
+    println!("Transactions require a real database pool (see transactions.rs example)");
+
     println!("\n=== Demo completed successfully! ===");
+    println!("\nTo run with real PostgreSQL:");
+    println!("1. Add PostgreSQL connection string");
+    println!("2. Replace MockPool with PostgresPool");
+    println!("3. Enable the 'postgres' feature flag");
+    
     Ok(())
 }
