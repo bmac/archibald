@@ -6,10 +6,10 @@ use crate::{Result, Operator, IntoOperator, Value};
 pub trait QueryBuilder {
     /// Generate the SQL query string
     fn to_sql(&self) -> Result<String>;
-    
+
     /// Get the parameters for the query
     fn parameters(&self) -> &[Value];
-    
+
     /// Clone the builder (for immutable chaining)
     fn clone_builder(&self) -> Self
     where
@@ -22,8 +22,8 @@ pub trait IntoCondition {
 }
 
 // Implementation for shorthand equality: where(("age", 18))
-impl<T> IntoCondition for (&str, T) 
-where 
+impl<T> IntoCondition for (&str, T)
+where
     T: Into<Value>
 {
     fn into_condition(self) -> (String, Operator, Value) {
@@ -32,8 +32,8 @@ where
 }
 
 // Implementation for explicit operators: where(("age", op::GT, 18)) or where(("age", ">", 18))
-impl<T, O> IntoCondition for (&str, O, T) 
-where 
+impl<T, O> IntoCondition for (&str, O, T)
+where
     T: Into<Value>,
     O: IntoOperator
 {
@@ -105,14 +105,14 @@ impl ColumnSelector {
     pub fn count() -> Self {
         Self::CountAll { alias: None }
     }
-    
+
     /// Create a COUNT(*) selector with alias
     pub fn count_as(alias: &str) -> Self {
-        Self::CountAll { 
-            alias: Some(alias.to_string()) 
+        Self::CountAll {
+            alias: Some(alias.to_string())
         }
     }
-    
+
     /// Create a COUNT(column) selector
     pub fn count_column(column: &str) -> Self {
         Self::Aggregate {
@@ -121,7 +121,7 @@ impl ColumnSelector {
             alias: None,
         }
     }
-    
+
     /// Create a COUNT(DISTINCT column) selector
     pub fn count_distinct(column: &str) -> Self {
         Self::Aggregate {
@@ -130,7 +130,7 @@ impl ColumnSelector {
             alias: None,
         }
     }
-    
+
     /// Create a SUM(column) selector
     pub fn sum(column: &str) -> Self {
         Self::Aggregate {
@@ -139,7 +139,7 @@ impl ColumnSelector {
             alias: None,
         }
     }
-    
+
     /// Create an AVG(column) selector
     pub fn avg(column: &str) -> Self {
         Self::Aggregate {
@@ -148,7 +148,7 @@ impl ColumnSelector {
             alias: None,
         }
     }
-    
+
     /// Create a MIN(column) selector
     pub fn min(column: &str) -> Self {
         Self::Aggregate {
@@ -157,7 +157,7 @@ impl ColumnSelector {
             alias: None,
         }
     }
-    
+
     /// Create a MAX(column) selector
     pub fn max(column: &str) -> Self {
         Self::Aggregate {
@@ -166,7 +166,7 @@ impl ColumnSelector {
             alias: None,
         }
     }
-    
+
     /// Add an alias to any selector
     pub fn as_alias(mut self, alias: &str) -> Self {
         match &mut self {
@@ -189,7 +189,7 @@ impl ColumnSelector {
             }
         }
     }
-    
+
     /// Convert to SQL string (validation happens at outer to_sql() level)
     pub fn to_sql(&self) -> String {
         match self {
@@ -203,7 +203,7 @@ impl ColumnSelector {
                         format!("{}({})", function, column)
                     }
                 };
-                
+
                 if let Some(alias) = alias {
                     format!("{} AS {}", func_sql, alias)
                 } else {
@@ -246,7 +246,7 @@ impl Subquery {
             alias: None,
         }
     }
-    
+
     /// Create a subquery with an alias (required for FROM/JOIN subqueries)
     pub fn with_alias(query: SelectBuilderComplete, alias: &str) -> Self {
         Self {
@@ -254,19 +254,19 @@ impl Subquery {
             alias: Some(alias.to_string()),
         }
     }
-    
+
     /// Convert to SQL string
     pub fn to_sql(&self) -> Result<String> {
         let inner_sql = self.query.to_sql()?;
         let subquery_sql = format!("({})", inner_sql);
-        
+
         if let Some(alias) = &self.alias {
             Ok(format!("{} AS {}", subquery_sql, alias))
         } else {
             Ok(subquery_sql)
         }
     }
-    
+
     /// Get parameters from the subquery
     pub fn parameters(&self) -> &[Value] {
         self.query.parameters()
@@ -282,7 +282,7 @@ impl ColumnSelector {
             alias: None,
         }
     }
-    
+
     /// Create a subquery column selector with alias
     pub fn subquery_as(query: SelectBuilderComplete, alias: &str) -> Self {
         Self::SubqueryColumn {
@@ -441,13 +441,13 @@ impl SelectBuilderInitial {
             parameters: Vec::new(),
         }
     }
-    
+
     /// Select specific columns, transitioning to SelectBuilderComplete
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::from;
-    /// 
+    ///
     /// let query = from("users").select(("id", "name", "email"));
     /// ```
     pub fn select<T>(self, columns: T) -> SelectBuilderComplete
@@ -469,7 +469,7 @@ impl SelectBuilderInitial {
             parameters: self.parameters,
         }
     }
-    
+
     /// Select all columns (equivalent to SELECT *), transitioning to SelectBuilderComplete
     pub fn select_all(self) -> SelectBuilderComplete {
         SelectBuilderComplete {
@@ -487,13 +487,13 @@ impl SelectBuilderInitial {
             parameters: self.parameters,
         }
     }
-    
+
     /// Add a WHERE condition
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::{from, op};
-    /// 
+    ///
     /// let query = from("users")
     ///     .where_(("age", op::GT, 18))
     ///     .where_(("name", "John"));
@@ -503,7 +503,7 @@ impl SelectBuilderInitial {
         C: IntoCondition,
     {
         let (column, operator, value) = condition.into_condition();
-        
+
         self.where_conditions.push(WhereCondition {
             column,
             operator,
@@ -511,17 +511,17 @@ impl SelectBuilderInitial {
             connector: WhereConnector::And,
         });
         self.parameters.push(self.where_conditions.last().unwrap().value.clone());
-        
+
         self
     }
-    
+
     /// Add an OR WHERE condition
     pub fn or_where<C>(mut self, condition: C) -> Self
     where
         C: IntoCondition,
     {
         let (column, operator, value) = condition.into_condition();
-        
+
         self.where_conditions.push(WhereCondition {
             column,
             operator,
@@ -529,10 +529,10 @@ impl SelectBuilderInitial {
             connector: WhereConnector::Or,
         });
         self.parameters.push(self.where_conditions.last().unwrap().value.clone());
-        
+
         self
     }
-    
+
     /// Add an AND WHERE condition (same as where)
     pub fn and_where<C>(self, condition: C) -> Self
     where
@@ -540,25 +540,25 @@ impl SelectBuilderInitial {
     {
         self.where_(condition)
     }
-    
+
     /// Set the LIMIT clause
     pub fn limit(mut self, limit: u64) -> Self {
         self.limit_value = Some(limit);
         self
     }
-    
+
     /// Set the OFFSET clause
     pub fn offset(mut self, offset: u64) -> Self {
         self.offset_value = Some(offset);
         self
     }
-    
+
     /// Add an INNER JOIN clause
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::from;
-    /// 
+    ///
     /// let query = from("users")
     ///     .inner_join("posts", "users.id", "posts.user_id");
     /// ```
@@ -575,7 +575,7 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Add a LEFT JOIN clause
     pub fn left_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
         self.join_clauses.push(JoinClause {
@@ -590,7 +590,7 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Add a RIGHT JOIN clause
     pub fn right_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
         self.join_clauses.push(JoinClause {
@@ -605,7 +605,7 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Add a FULL OUTER JOIN clause
     pub fn full_outer_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
         self.join_clauses.push(JoinClause {
@@ -620,7 +620,7 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Add a CROSS JOIN clause
     pub fn cross_join(mut self, table: &str) -> Self {
         self.join_clauses.push(JoinClause {
@@ -630,13 +630,13 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Generic JOIN method with custom join type and operator
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::{from, JoinType, op};
-    /// 
+    ///
     /// let query = from("users")
     ///     .join(JoinType::Left, "profiles", "users.id", op::EQ, "profiles.user_id");
     /// ```
@@ -656,13 +656,13 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Add ORDER BY clause
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::{from, SortDirection};
-    /// 
+    ///
     /// let query = from("users").order_by("name", SortDirection::Asc);
     /// ```
     pub fn order_by(mut self, column: &str, direction: SortDirection) -> Self {
@@ -674,11 +674,11 @@ impl SelectBuilderInitial {
     }
 
     /// Add ORDER BY clause with ascending sort
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::from;
-    /// 
+    ///
     /// let query = from("users").order_by_asc("created_at");
     /// ```
     pub fn order_by_asc(mut self, column: &str) -> Self {
@@ -688,13 +688,13 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Add ORDER BY clause with descending sort
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::from;
-    /// 
+    ///
     /// let query = from("users").order_by_desc("created_at");
     /// ```
     pub fn order_by_desc(mut self, column: &str) -> Self {
@@ -704,18 +704,18 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
-    
+
+
     /// Add GROUP BY clause
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::from;
-    /// 
+    ///
     /// let query = from("orders").group_by(("customer_id", "status"));
     /// ```
-    pub fn group_by<C>(mut self, columns: C) -> Self 
-    where 
+    pub fn group_by<C>(mut self, columns: C) -> Self
+    where
         C: IntoColumns,
     {
         self.group_by_clause = Some(GroupByClause {
@@ -723,26 +723,26 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Add DISTINCT clause to eliminate duplicate rows
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::from;
-    /// 
+    ///
     /// let query = from("users").select("status").distinct();
     /// ```
     pub fn distinct(mut self) -> Self {
         self.distinct = true;
         self
     }
-    
+
     /// Add a HAVING condition for aggregated results
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::{from, ColumnSelector, op};
-    /// 
+    ///
     /// let query = from("orders")
     ///     .select(vec![
     ///         ColumnSelector::Column("status".to_string()),
@@ -765,7 +765,7 @@ impl SelectBuilderInitial {
         self.parameters.push(self.having_conditions.last().unwrap().value.clone());
         self
     }
-    
+
     /// Add an AND HAVING condition
     pub fn and_having<C>(mut self, condition: C) -> Self
     where
@@ -781,7 +781,7 @@ impl SelectBuilderInitial {
         self.parameters.push(self.having_conditions.last().unwrap().value.clone());
         self
     }
-    
+
     /// Add an OR HAVING condition
     pub fn or_having<C>(mut self, condition: C) -> Self
     where
@@ -797,13 +797,13 @@ impl SelectBuilderInitial {
         self.parameters.push(self.having_conditions.last().unwrap().value.clone());
         self
     }
-    
+
     /// Add WHERE condition with IN subquery
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::from;
-    /// 
+    ///
     /// let subquery = from("orders").select("customer_id").where_(("status", "active"));
     /// let query = from("customers").where_in("id", subquery);
     /// ```
@@ -817,7 +817,7 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Add WHERE condition with NOT IN subquery
     pub fn where_not_in(mut self, column: &str, subquery: SelectBuilderComplete) -> Self {
         let subquery_wrapper = Subquery::new(subquery);
@@ -829,7 +829,7 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Add WHERE EXISTS subquery condition
     pub fn where_exists(mut self, subquery: SelectBuilderComplete) -> Self {
         let subquery_wrapper = Subquery::new(subquery);
@@ -841,7 +841,7 @@ impl SelectBuilderInitial {
         });
         self
     }
-    
+
     /// Add WHERE NOT EXISTS subquery condition
     pub fn where_not_exists(mut self, subquery: SelectBuilderComplete) -> Self {
         let subquery_wrapper = Subquery::new(subquery);
@@ -862,7 +862,7 @@ impl SelectBuilderComplete {
         C: IntoCondition,
     {
         let (column, operator, value) = condition.into_condition();
-        
+
         self.where_conditions.push(WhereCondition {
             column,
             operator,
@@ -870,17 +870,17 @@ impl SelectBuilderComplete {
             connector: WhereConnector::And,
         });
         self.parameters.push(self.where_conditions.last().unwrap().value.clone());
-        
+
         self
     }
-    
+
     /// Add an OR WHERE condition
     pub fn or_where<C>(mut self, condition: C) -> Self
     where
         C: IntoCondition,
     {
         let (column, operator, value) = condition.into_condition();
-        
+
         self.where_conditions.push(WhereCondition {
             column,
             operator,
@@ -888,10 +888,10 @@ impl SelectBuilderComplete {
             connector: WhereConnector::Or,
         });
         self.parameters.push(self.where_conditions.last().unwrap().value.clone());
-        
+
         self
     }
-    
+
     /// Add an AND WHERE condition (alias for where_)
     pub fn and_where<C>(self, condition: C) -> Self
     where
@@ -899,19 +899,19 @@ impl SelectBuilderComplete {
     {
         self.where_(condition)
     }
-    
+
     /// Add a LIMIT clause
     pub fn limit(mut self, limit: u64) -> Self {
         self.limit_value = Some(limit);
         self
     }
-    
+
     /// Add an OFFSET clause
     pub fn offset(mut self, offset: u64) -> Self {
         self.offset_value = Some(offset);
         self
     }
-    
+
     /// Add INNER JOIN clause
     pub fn inner_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
         self.join_clauses.push(JoinClause {
@@ -926,9 +926,9 @@ impl SelectBuilderComplete {
         });
         self
     }
-    
+
     /// Add GROUP BY clause
-    pub fn group_by<C>(mut self, columns: C) -> Self 
+    pub fn group_by<C>(mut self, columns: C) -> Self
     where
         C: IntoColumns,
     {
@@ -937,14 +937,14 @@ impl SelectBuilderComplete {
         });
         self
     }
-    
+
     /// Add HAVING condition
     pub fn having<C>(mut self, condition: C) -> Self
     where
         C: IntoCondition,
     {
         let (column, operator, value) = condition.into_condition();
-        
+
         self.having_conditions.push(HavingCondition {
             column_or_function: column,
             operator,
@@ -952,10 +952,10 @@ impl SelectBuilderComplete {
             connector: WhereConnector::And,
         });
         self.parameters.push(self.having_conditions.last().unwrap().value.clone());
-        
+
         self
     }
-    
+
     /// Add ORDER BY clause
     pub fn order_by(mut self, column: &str, direction: SortDirection) -> Self {
         self.order_by_clauses.push(OrderByClause {
@@ -964,7 +964,7 @@ impl SelectBuilderComplete {
         });
         self
     }
-    
+
     /// Add WHERE IN subquery condition
     pub fn where_in(mut self, column: &str, subquery: SelectBuilderComplete) -> Self {
         let subquery_wrapper = Subquery::new(subquery);
@@ -976,7 +976,7 @@ impl SelectBuilderComplete {
         });
         self
     }
-    
+
     /// Add WHERE EXISTS subquery condition
     pub fn where_exists(mut self, subquery: SelectBuilderComplete) -> Self {
         let subquery_wrapper = Subquery::new(subquery);
@@ -996,38 +996,38 @@ impl QueryBuilder for SelectBuilderComplete {
         for condition in &self.where_conditions {
             condition.operator.validate()?;
         }
-        
+
         for condition in &self.having_conditions {
             condition.operator.validate()?;
         }
-        
+
         for condition in &self.subquery_conditions {
             condition.operator.validate()?;
             // Validate subquery recursively
             condition.subquery.query.to_sql()?;
         }
-        
+
         for join_clause in &self.join_clauses {
             for condition in &join_clause.on_conditions {
                 condition.operator.validate()?;
             }
         }
-        
+
         let mut sql = String::new();
-        
+
         // SELECT clause
         sql.push_str("SELECT ");
-        
+
         if self.distinct {
             sql.push_str("DISTINCT ");
         }
-        
+
         let column_strings: Vec<String> = self.selected_columns.iter().map(|col| col.to_sql()).collect();
         sql.push_str(&column_strings.join(", "));
-        
+
         // FROM clause
         sql.push_str(&format!(" FROM {}", self.table_name));
-        
+
         // JOIN clauses
         for join_clause in &self.join_clauses {
             sql.push_str(&format!(" {} {}", join_clause.join_type, join_clause.table));
@@ -1039,12 +1039,12 @@ impl QueryBuilder for SelectBuilderComplete {
                 sql.push_str(&conditions.join(" AND "));
             }
         }
-        
+
         // WHERE clause
         if !self.where_conditions.is_empty() || !self.subquery_conditions.is_empty() {
             sql.push_str(" WHERE ");
             let mut where_parts = Vec::new();
-            
+
             // Regular WHERE conditions
             for (i, condition) in self.where_conditions.iter().enumerate() {
                 let connector = if i == 0 { "" } else {
@@ -1055,7 +1055,7 @@ impl QueryBuilder for SelectBuilderComplete {
                 };
                 where_parts.push(format!("{}{} {} ?", connector, condition.column, condition.operator));
             }
-            
+
             // Subquery conditions
             for (i, condition) in self.subquery_conditions.iter().enumerate() {
                 let connector = if i == 0 && self.where_conditions.is_empty() { "" } else {
@@ -1064,7 +1064,7 @@ impl QueryBuilder for SelectBuilderComplete {
                         WhereConnector::Or => " OR ",
                     }
                 };
-                
+
                 let subquery_sql = condition.subquery.query.to_sql()?;
                 let condition_sql = match condition.operator {
                     Operator::IN => format!("{}{} IN ({})", connector, condition.column, subquery_sql),
@@ -1075,16 +1075,16 @@ impl QueryBuilder for SelectBuilderComplete {
                 };
                 where_parts.push(condition_sql);
             }
-            
+
             sql.push_str(&where_parts.join(""));
         }
-        
+
         // GROUP BY clause
         if let Some(ref group_by) = self.group_by_clause {
             sql.push_str(" GROUP BY ");
             sql.push_str(&group_by.columns.join(", "));
         }
-        
+
         // HAVING clause
         if !self.having_conditions.is_empty() {
             sql.push_str(" HAVING ");
@@ -1098,7 +1098,7 @@ impl QueryBuilder for SelectBuilderComplete {
                 sql.push_str(&format!("{} {} ?", condition.column_or_function, condition.operator));
             }
         }
-        
+
         // ORDER BY clause
         if !self.order_by_clauses.is_empty() {
             sql.push_str(" ORDER BY ");
@@ -1107,24 +1107,24 @@ impl QueryBuilder for SelectBuilderComplete {
                 .collect();
             sql.push_str(&order_strings.join(", "));
         }
-        
+
         // LIMIT clause
         if let Some(limit) = self.limit_value {
             sql.push_str(&format!(" LIMIT {}", limit));
         }
-        
-        // OFFSET clause  
+
+        // OFFSET clause
         if let Some(offset) = self.offset_value {
             sql.push_str(&format!(" OFFSET {}", offset));
         }
-        
+
         Ok(sql)
     }
-    
+
     fn parameters(&self) -> &[Value] {
         &self.parameters
     }
-    
+
     fn clone_builder(&self) -> Self {
         self.clone()
     }
@@ -1171,7 +1171,7 @@ impl IntoColumnSelectors for Vec<ColumnSelector> {
     }
 }
 
-// Tuple implementations for IntoColumnSelectors  
+// Tuple implementations for IntoColumnSelectors
 impl IntoColumnSelectors for (&str,) {
     fn into_column_selectors(self) -> Vec<ColumnSelector> {
         vec![ColumnSelector::Column(self.0.to_string())]
@@ -1339,9 +1339,9 @@ impl IntoColumns for (&str, &str, &str) {
 impl IntoColumns for (&str, &str, &str, &str) {
     fn into_columns(self) -> Vec<String> {
         vec![
-            self.0.to_string(), 
-            self.1.to_string(), 
-            self.2.to_string(), 
+            self.0.to_string(),
+            self.1.to_string(),
+            self.2.to_string(),
             self.3.to_string()
         ]
     }
@@ -1373,18 +1373,18 @@ impl InsertBuilderInitial {
             table_name: table.to_string(),
         }
     }
-    
+
     /// Add values for a single record, transitioning to InsertBuilderComplete
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::insert;
     /// use std::collections::HashMap;
-    /// 
+    ///
     /// let mut data = HashMap::new();
     /// data.insert("name".to_string(), "John".into());
     /// data.insert("age".to_string(), 30.into());
-    /// 
+    ///
     /// let query = insert("users").values(data);
     /// ```
     pub fn values<T>(self, data: T) -> InsertBuilderComplete
@@ -1399,7 +1399,7 @@ impl InsertBuilderInitial {
             parameters: Vec::new(),
         }
     }
-    
+
     /// Add values for multiple records, transitioning to InsertBuilderComplete
     pub fn values_many<T>(self, data: Vec<T>) -> InsertBuilderComplete
     where
@@ -1407,17 +1407,17 @@ impl InsertBuilderInitial {
     {
         let mut columns = Vec::new();
         let mut values_vec = Vec::new();
-        
+
         if let Some(first) = data.first() {
             let (cols, _) = first.clone().into_insert_data();
             columns = cols;
-            
+
             for item in data {
                 let (_, vals) = item.into_insert_data();
                 values_vec.push(vals);
             }
         }
-        
+
         InsertBuilderComplete {
             table_name: self.table_name,
             columns,
@@ -1437,18 +1437,18 @@ impl QueryBuilder for InsertBuilderComplete {
         if self.columns.is_empty() || self.values.is_empty() {
             return Err(crate::Error::invalid_query("INSERT requires columns and values"));
         }
-        
+
         let mut sql = String::new();
-        
+
         // INSERT INTO clause
         sql.push_str("INSERT INTO ");
         sql.push_str(&self.table_name);
-        
+
         // Columns
         sql.push_str(" (");
         sql.push_str(&self.columns.join(", "));
         sql.push_str(")");
-        
+
         // VALUES clause
         sql.push_str(" VALUES ");
         let value_groups: Vec<String> = self.values
@@ -1459,14 +1459,14 @@ impl QueryBuilder for InsertBuilderComplete {
             })
             .collect();
         sql.push_str(&value_groups.join(", "));
-        
+
         Ok(sql)
     }
-    
+
     fn parameters(&self) -> &[Value] {
         &self.parameters
     }
-    
+
     fn clone_builder(&self) -> Self {
         self.clone()
     }
@@ -1491,18 +1491,18 @@ impl UpdateBuilder {
             parameters: Vec::new(),
         }
     }
-    
+
     /// Set column values
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::UpdateBuilder;
     /// use std::collections::HashMap;
-    /// 
+    ///
     /// let mut updates = HashMap::new();
     /// updates.insert("name".to_string(), "Jane".into());
     /// updates.insert("age".to_string(), 25.into());
-    /// 
+    ///
     /// let query = UpdateBuilder::new("users").set(updates);
     /// ```
     pub fn set<T>(mut self, data: T) -> Self
@@ -1513,14 +1513,14 @@ impl UpdateBuilder {
         self.set_clauses.extend(updates);
         self
     }
-    
+
     /// Add a WHERE condition
     pub fn where_<C>(mut self, condition: C) -> Self
     where
         C: IntoCondition,
     {
         let (column, operator, value) = condition.into_condition();
-        
+
         self.where_conditions.push(WhereCondition {
             column,
             operator,
@@ -1528,17 +1528,17 @@ impl UpdateBuilder {
             connector: WhereConnector::And,
         });
         self.parameters.push(self.where_conditions.last().unwrap().value.clone());
-        
+
         self
     }
-    
+
     /// Add an OR WHERE condition
     pub fn or_where<C>(mut self, condition: C) -> Self
     where
         C: IntoCondition,
     {
         let (column, operator, value) = condition.into_condition();
-        
+
         self.where_conditions.push(WhereCondition {
             column,
             operator,
@@ -1546,10 +1546,10 @@ impl UpdateBuilder {
             connector: WhereConnector::Or,
         });
         self.parameters.push(self.where_conditions.last().unwrap().value.clone());
-        
+
         self
     }
-    
+
     /// Add an AND WHERE condition (same as where_)
     pub fn and_where<C>(self, condition: C) -> Self
     where
@@ -1564,18 +1564,18 @@ impl QueryBuilder for UpdateBuilder {
         if self.set_clauses.is_empty() {
             return Err(crate::Error::invalid_query("UPDATE requires SET clauses"));
         }
-        
+
         // Validate all operators before generating SQL
         for condition in &self.where_conditions {
             condition.operator.validate()?;
         }
-        
+
         let mut sql = String::new();
-        
+
         // UPDATE clause
         sql.push_str("UPDATE ");
         sql.push_str(&self.table_name);
-        
+
         // SET clause
         sql.push_str(" SET ");
         let set_parts: Vec<String> = self.set_clauses
@@ -1583,11 +1583,11 @@ impl QueryBuilder for UpdateBuilder {
             .map(|(column, _)| format!("{} = ?", column))
             .collect();
         sql.push_str(&set_parts.join(", "));
-        
+
         // WHERE clause
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
-            
+
             for (i, condition) in self.where_conditions.iter().enumerate() {
                 if i > 0 {
                     match condition.connector {
@@ -1595,80 +1595,114 @@ impl QueryBuilder for UpdateBuilder {
                         WhereConnector::Or => sql.push_str(" OR "),
                     }
                 }
-                
+
                 sql.push_str(&condition.column);
                 sql.push(' ');
                 sql.push_str(condition.operator.as_str());
                 sql.push_str(" ?");
             }
         }
-        
+
         Ok(sql)
     }
-    
+
     fn parameters(&self) -> &[Value] {
         &self.parameters
     }
-    
+
     fn clone_builder(&self) -> Self {
         self.clone()
     }
 }
 
-/// DELETE query builder
+/// DELETE query builder in initial state (before where_() is called)
+/// Can build conditions but cannot execute queries
 #[derive(Debug, Clone)]
-pub struct DeleteBuilder {
+pub struct DeleteBuilderInitial {
+    table_name: String,
+}
+
+/// DELETE query builder in complete state (after where_() is called)
+/// Can execute queries and add more WHERE conditions
+#[derive(Debug, Clone)]
+pub struct DeleteBuilderComplete {
     table_name: String,
     where_conditions: Vec<WhereCondition>,
     parameters: Vec<Value>,
 }
 
-impl DeleteBuilder {
-    /// Create a new DELETE query builder
+impl DeleteBuilderInitial {
+    /// Create a new DELETE query builder in initial state
     pub fn new(table: &str) -> Self {
         Self {
             table_name: table.to_string(),
-            where_conditions: Vec::new(),
-            parameters: Vec::new(),
         }
     }
-    
+
+    /// Add a WHERE condition - transitions to DeleteBuilderComplete
+    /// This is required before the query can be executed
+    pub fn where_<C>(self, condition: C) -> DeleteBuilderComplete
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+
+        let mut where_conditions = Vec::new();
+        let mut parameters = Vec::new();
+
+        where_conditions.push(WhereCondition {
+            column,
+            operator,
+            value: value.clone(),
+            connector: WhereConnector::And,
+        });
+        parameters.push(value);
+
+        DeleteBuilderComplete {
+            table_name: self.table_name,
+            where_conditions,
+            parameters,
+        }
+    }
+}
+
+impl DeleteBuilderComplete {
     /// Add a WHERE condition
     pub fn where_<C>(mut self, condition: C) -> Self
     where
         C: IntoCondition,
     {
         let (column, operator, value) = condition.into_condition();
-        
+
         self.where_conditions.push(WhereCondition {
             column,
             operator,
-            value,
+            value: value.clone(),
             connector: WhereConnector::And,
         });
-        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
-        
+        self.parameters.push(value);
+
         self
     }
-    
+
     /// Add an OR WHERE condition
     pub fn or_where<C>(mut self, condition: C) -> Self
     where
         C: IntoCondition,
     {
         let (column, operator, value) = condition.into_condition();
-        
+
         self.where_conditions.push(WhereCondition {
             column,
             operator,
-            value,
+            value: value.clone(),
             connector: WhereConnector::Or,
         });
-        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
-        
+        self.parameters.push(value);
+
         self
     }
-    
+
     /// Add an AND WHERE condition (same as where_)
     pub fn and_where<C>(self, condition: C) -> Self
     where
@@ -1678,23 +1712,23 @@ impl DeleteBuilder {
     }
 }
 
-impl QueryBuilder for DeleteBuilder {
+impl QueryBuilder for DeleteBuilderComplete {
     fn to_sql(&self) -> Result<String> {
         // Validate all operators before generating SQL
         for condition in &self.where_conditions {
             condition.operator.validate()?;
         }
-        
+
         let mut sql = String::new();
-        
+
         // DELETE FROM clause
         sql.push_str("DELETE FROM ");
         sql.push_str(&self.table_name);
-        
+
         // WHERE clause
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
-            
+
             for (i, condition) in self.where_conditions.iter().enumerate() {
                 if i > 0 {
                     match condition.connector {
@@ -1702,21 +1736,21 @@ impl QueryBuilder for DeleteBuilder {
                         WhereConnector::Or => sql.push_str(" OR "),
                     }
                 }
-                
+
                 sql.push_str(&condition.column);
                 sql.push(' ');
                 sql.push_str(condition.operator.as_str());
                 sql.push_str(" ?");
             }
         }
-        
+
         Ok(sql)
     }
-    
+
     fn parameters(&self) -> &[Value] {
         &self.parameters
     }
-    
+
     fn clone_builder(&self) -> Self {
         self.clone()
     }
@@ -1750,62 +1784,66 @@ impl IntoUpdateData for std::collections::HashMap<String, Value> {
 mod tests {
     use super::*;
     use crate::operator::op;
-    
+    use crate::{from, delete};
+
     #[test]
     fn test_basic_select() {
-        let query = SelectBuilder::new("users");
+        let query = from("users").select("*");
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users");
     }
-    
+
     #[test]
     fn test_select_columns() {
-        let query = SelectBuilder::new("users").select(("id", "name"));
+        let query = from("users").select(("id", "name"));
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT id, name FROM users");
     }
-    
+
     #[test]
     fn test_select_with_where() {
-        let query = SelectBuilder::new("users").where_(("age", op::GT, 18));
+        let query = from("users").select("*").where_(("age", op::GT, 18));
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users WHERE age > ?");
     }
-    
+
     #[test]
     fn test_multiple_where_conditions() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
+            .select("*")
             .where_(("age", op::GT, 18))
             .where_(("name", "John"));
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users WHERE age > ? AND name = ?");
     }
-    
+
     #[test]
     fn test_or_where() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
+            .select("*")
             .where_(("age", op::GT, 18))
             .or_where(("status", "admin"));
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users WHERE age > ? OR status = ?");
     }
-    
+
     #[test]
     fn test_limit_and_offset() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
+            .select("*")
             .limit(10)
             .offset(20);
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users LIMIT 10 OFFSET 20");
     }
-    
+
     #[test]
     fn test_string_operator_conversion() {
-        let query = SelectBuilder::new("users").where_(("age", ">", 18));
+        let query = from("users").select("*").where_(("age", ">", 18));
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users WHERE age > ?");
     }
-    
+
     #[test]
     fn test_condition_trait_implementations() {
         // Test shorthand equality
@@ -1813,83 +1851,83 @@ mod tests {
         assert_eq!(col, "age");
         assert_eq!(op, Operator::EQ);
         assert_eq!(val, Value::I32(18));
-        
+
         // Test explicit operator
         let (col, op, val) = ("age", op::GT, 18).into_condition();
         assert_eq!(col, "age");
         assert_eq!(op, Operator::GT);
         assert_eq!(val, Value::I32(18));
-        
+
         // Test string operator
         let (col, op, val) = ("name", "LIKE", "%john%").into_condition();
         assert_eq!(col, "name");
         assert_eq!(op, Operator::LIKE);
         assert_eq!(val, Value::String("%john%".to_string()));
     }
-    
+
     #[test]
     fn test_immutable_builder_pattern() {
-        let base_query = SelectBuilder::new("users");
+        let base_query = from("users").select("*");
         let query1 = base_query.clone().where_(("age", op::GT, 18));
         let query2 = base_query.clone().where_(("name", "John"));
-        
+
         assert_ne!(query1.to_sql().unwrap(), query2.to_sql().unwrap());
     }
-    
+
     #[test]
     fn test_insert_builder() {
         use std::collections::HashMap;
-        
+
         let mut data = HashMap::new();
         data.insert("name".to_string(), Value::String("John".to_string()));
         data.insert("age".to_string(), Value::I32(30));
-        
+
         let query = crate::insert("users").values(data);
         let sql = query.to_sql().unwrap();
-        
+
         // Note: HashMap iteration order is not guaranteed, so we just check structure
         assert!(sql.starts_with("INSERT INTO users ("));
         assert!(sql.contains(") VALUES ("));
         assert!(sql.contains("?, ?"));
     }
-    
+
     #[test]
     fn test_insert_many() {
         use std::collections::HashMap;
-        
+
         let mut data1 = HashMap::new();
         data1.insert("name".to_string(), Value::String("John".to_string()));
         data1.insert("age".to_string(), Value::I32(30));
-        
+
         let mut data2 = HashMap::new();
         data2.insert("name".to_string(), Value::String("Jane".to_string()));
         data2.insert("age".to_string(), Value::I32(25));
-        
+
         let query = crate::insert("users").values_many(vec![data1, data2]);
         let sql = query.to_sql().unwrap();
-        
+
         assert!(sql.starts_with("INSERT INTO users ("));
         assert!(sql.contains(") VALUES ("));
         assert!(sql.contains("), ("));
     }
-    
+
     #[test]
     fn test_update_builder() {
         use std::collections::HashMap;
-        
+
         let mut updates = HashMap::new();
         updates.insert("name".to_string(), Value::String("Jane".to_string()));
         updates.insert("age".to_string(), Value::I32(25));
-        
+
         let query = UpdateBuilder::new("users")
             .set(updates)
             .where_(("id", op::EQ, 1));
         let sql = query.to_sql().unwrap();
-        
+
         assert!(sql.starts_with("UPDATE users SET "));
         assert!(sql.contains(" WHERE id = ?"));
     }
-    
+
     #[test]
     fn test_update_without_set_fails() {
         let query = UpdateBuilder::new("users").where_(("id", op::EQ, 1));
@@ -1897,24 +1935,24 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("UPDATE requires SET clauses"));
     }
-    
+
     #[test]
     fn test_delete_builder() {
-        let query = DeleteBuilder::new("users")
+        let query = delete("users")
             .where_(("age", op::LT, 18))
             .or_where(("status", "inactive"));
         let sql = query.to_sql().unwrap();
-        
+
         assert_eq!(sql, "DELETE FROM users WHERE age < ? OR status = ?");
     }
-    
+
     #[test]
     fn test_delete_without_where() {
-        let query = DeleteBuilder::new("users");
+        let query = delete("users");
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "DELETE FROM users");
     }
-    
+
     #[test]
     fn test_insert_empty_data_fails() {
         let query = crate::insert("users");
@@ -1922,245 +1960,261 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("INSERT requires columns and values"));
     }
-    
+
     #[test]
     fn test_and_where_methods() {
         // Test that and_where works the same as where_
-        let query1 = SelectBuilder::new("users")
+        let query1 = from("users")
+            .select("*")
             .where_(("age", op::GT, 18))
             .where_(("status", "active"));
-            
-        let query2 = SelectBuilder::new("users")
+
+        let query2 = from("users")
+            .select("*")
             .where_(("age", op::GT, 18))
             .and_where(("status", "active"));
-            
+
         assert_eq!(query1.to_sql().unwrap(), query2.to_sql().unwrap());
-        
+
         // Test with UpdateBuilder
         use std::collections::HashMap;
         let mut updates = HashMap::new();
         updates.insert("name".to_string(), Value::String("Test".to_string()));
-        
+
         let update_query = UpdateBuilder::new("users")
             .set(updates)
             .where_(("id", 1))
             .and_where(("active", true));
         let sql = update_query.to_sql().unwrap();
         assert!(sql.contains("WHERE id = ? AND active = ?"));
-        
-        // Test with DeleteBuilder  
-        let delete_query = DeleteBuilder::new("users")
+
+        // Test with DeleteBuilder
+        let delete_query = delete("users")
             .where_(("age", op::LT, 18))
             .and_where(("status", "inactive"));
         let sql = delete_query.to_sql().unwrap();
         assert_eq!(sql, "DELETE FROM users WHERE age < ? AND status = ?");
     }
-    
+
     #[test]
     fn test_complex_where_combinations() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
+            .select("*")
             .where_(("age", op::GTE, 18))     // First condition (AND by default)
             .and_where(("status", "active"))  // Explicit AND
             .or_where(("role", "admin"))      // OR condition
             .and_where(("verified", true));   // Back to AND
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users WHERE age >= ? AND status = ? OR role = ? AND verified = ?");
     }
-    
+
     // JOIN operation tests
     #[test]
     fn test_inner_join() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select(("users.name", "profiles.bio"))
             .inner_join("profiles", "users.id", "profiles.user_id");
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT users.name, profiles.bio FROM users INNER JOIN profiles ON users.id = profiles.user_id");
     }
-    
+
     #[test]
     fn test_left_join() {
-        let query = SelectBuilder::new("users")
-            .left_join("profiles", "users.id", "profiles.user_id");
-            
+        let query = from("users")
+            .left_join("profiles", "users.id", "profiles.user_id")
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users LEFT JOIN profiles ON users.id = profiles.user_id");
     }
-    
+
     #[test]
     fn test_right_join() {
-        let query = SelectBuilder::new("users")
-            .right_join("orders", "users.id", "orders.user_id");
-            
+        let query = from("users")
+            .right_join("orders", "users.id", "orders.user_id")
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users RIGHT JOIN orders ON users.id = orders.user_id");
     }
-    
+
     #[test]
     fn test_full_outer_join() {
-        let query = SelectBuilder::new("users")
-            .full_outer_join("profiles", "users.id", "profiles.user_id");
-            
+        let query = from("users")
+            .full_outer_join("profiles", "users.id", "profiles.user_id")
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users FULL OUTER JOIN profiles ON users.id = profiles.user_id");
     }
-    
+
     #[test]
     fn test_cross_join() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
+            .select("*")
             .cross_join("categories");
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users CROSS JOIN categories");
     }
-    
+
     #[test]
     fn test_join_with_custom_operator() {
-        let query = SelectBuilder::new("users")
-            .join(JoinType::Inner, "profiles", "users.id", op::GT, "profiles.min_user_id");
-            
+        let query = from("users")
+            .join(JoinType::Inner, "profiles", "users.id", op::GT, "profiles.min_user_id")
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id > profiles.min_user_id");
     }
-    
+
     #[test]
     fn test_multiple_joins() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .inner_join("profiles", "users.id", "profiles.user_id")
             .left_join("orders", "users.id", "orders.user_id")
-            .right_join("categories", "orders.category_id", "categories.id");
-            
+            .right_join("categories", "orders.category_id", "categories.id")
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id LEFT JOIN orders ON users.id = orders.user_id RIGHT JOIN categories ON orders.category_id = categories.id");
     }
-    
+
     #[test]
     fn test_join_with_where_clause() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select(("users.name", "orders.total"))
             .inner_join("orders", "users.id", "orders.user_id")
             .where_(("users.active", true))
             .and_where(("orders.status", "completed"));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT users.name, orders.total FROM users INNER JOIN orders ON users.id = orders.user_id WHERE users.active = ? AND orders.status = ?");
     }
-    
+
     #[test]
     fn test_join_with_limit_offset() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .inner_join("profiles", "users.id", "profiles.user_id")
+            .select("*")
             .limit(10)
             .offset(20);
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id LIMIT 10 OFFSET 20");
     }
-    
+
     #[test]
     fn test_generic_join_method() {
-        let query = SelectBuilder::new("users")
-            .join(JoinType::Inner, "profiles", "users.id", op::EQ, "profiles.user_id");
-            
+        let query = from("users")
+            .join(JoinType::Inner, "profiles", "users.id", op::EQ, "profiles.user_id")
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id");
     }
-    
+
     // ORDER BY and GROUP BY tests
     #[test]
     fn test_order_by_asc() {
-        let query = SelectBuilder::new("users")
-            .order_by_asc("name");
-            
+        let query = from("users")
+            .order_by_asc("name")
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC");
     }
-    
+
     #[test]
     fn test_order_by_desc() {
-        let query = SelectBuilder::new("users")
-            .order_by_desc("created_at");
-            
+        let query = from("users")
+            .order_by_desc("created_at")
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC");
     }
-    
+
     #[test]
     fn test_order_by_with_direction() {
-        let query = SelectBuilder::new("users")
-            .order_by("age", SortDirection::Desc);
-            
+        let query = from("users")
+            .order_by("age", SortDirection::Desc)
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY age DESC");
     }
-    
+
     #[test]
     fn test_multiple_order_by() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .order_by_asc("name")
             .order_by_desc("created_at")
-            .order_by_asc("id");
-            
+            .order_by_asc("id")
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC, created_at DESC, id ASC");
     }
-    
+
     #[test]
     fn test_group_by_single_column() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select("status")
             .group_by("status");
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT status FROM orders GROUP BY status");
     }
-    
+
     #[test]
     fn test_group_by_multiple_columns() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select(("customer_id", "status"))
             .group_by(("customer_id", "status"));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT customer_id, status FROM orders GROUP BY customer_id, status");
     }
-    
+
     #[test]
     fn test_group_by_with_where() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select("status")
             .where_(("active", true))
             .group_by("status");
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT status FROM orders WHERE active = ? GROUP BY status");
     }
-    
+
     #[test]
     fn test_order_by_with_where() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .where_(("active", true))
-            .order_by_asc("name");
-            
+            .order_by_asc("name")
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users WHERE active = ? ORDER BY name ASC");
     }
-    
+
     #[test]
     fn test_group_by_with_order_by() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select("status")
             .group_by("status")
             .order_by_asc("status");
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT status FROM orders GROUP BY status ORDER BY status ASC");
     }
-    
+
     #[test]
     fn test_complex_query_with_joins_group_order() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select(("users.name", "orders.status"))
             .inner_join("orders", "users.id", "orders.user_id")
             .where_(("users.active", true))
@@ -2168,222 +2222,224 @@ mod tests {
             .order_by_asc("users.name")
             .order_by_desc("orders.status")
             .limit(10);
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT users.name, orders.status FROM users INNER JOIN orders ON users.id = orders.user_id WHERE users.active = ? GROUP BY users.name, orders.status ORDER BY users.name ASC, orders.status DESC LIMIT 10");
     }
-    
+
     #[test]
     fn test_order_by_with_limit_offset() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .order_by_asc("created_at")
             .limit(25)
-            .offset(50);
-            
+            .offset(50)
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY created_at ASC LIMIT 25 OFFSET 50");
     }
-    
+
     // DISTINCT operation tests
     #[test]
     fn test_distinct_basic() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select("status")
             .distinct();
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT status FROM users");
     }
-    
+
     #[test]
     fn test_distinct_multiple_columns() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select(("status", "role"))
             .distinct();
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT status, role FROM users");
     }
-    
+
     #[test]
     fn test_distinct_with_where() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
+            .where_(("active", true))
             .select("department")
-            .distinct()
-            .where_(("active", true));
-            
+            .distinct();
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT department FROM users WHERE active = ?");
     }
-    
+
     #[test]
     fn test_distinct_with_join() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select("users.role")
             .distinct()
             .inner_join("departments", "users.dept_id", "departments.id");
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT users.role FROM users INNER JOIN departments ON users.dept_id = departments.id");
     }
-    
+
     #[test]
     fn test_distinct_with_order_by() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select("status")
             .distinct()
             .order_by_asc("status");
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT status FROM users ORDER BY status ASC");
     }
-    
+
     #[test]
     fn test_distinct_with_group_by() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
+            .group_by("customer_id")
             .select("customer_id")
-            .distinct()
-            .group_by("customer_id");
-            
+            .distinct();
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT customer_id FROM orders GROUP BY customer_id");
     }
-    
+
     #[test]
     fn test_distinct_with_limit() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select("department")
             .distinct()
             .limit(5);
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT department FROM users LIMIT 5");
     }
-    
+
     #[test]
     fn test_complex_distinct_query() {
-        let query = SelectBuilder::new("users")
-            .select(("users.department", "roles.name"))
-            .distinct()
+        let query = from("users")
             .inner_join("user_roles", "users.id", "user_roles.user_id")
             .inner_join("roles", "user_roles.role_id", "roles.id")
+            .select(("users.department", "roles.name"))
+            .distinct()
             .where_(("users.active", true))
             .and_where(("roles.active", true))
             .order_by_asc("users.department")
             .order_by_asc("roles.name")
             .limit(20);
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT users.department, roles.name FROM users INNER JOIN user_roles ON users.id = user_roles.user_id INNER JOIN roles ON user_roles.role_id = roles.id WHERE users.active = ? AND roles.active = ? ORDER BY users.department ASC, roles.name ASC LIMIT 20");
     }
-    
+
     #[test]
     fn test_distinct_all_columns() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
+            .select("*")
             .distinct();
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT * FROM users");
     }
-    
+
     // Aggregation function tests
     #[test]
     fn test_count_all() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select(ColumnSelector::count());
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT COUNT(*) FROM users");
     }
-    
+
     #[test]
     fn test_count_all_with_alias() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select(ColumnSelector::count_as("total"));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT COUNT(*) AS total FROM users");
     }
-    
+
     #[test]
     fn test_count_column() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select(ColumnSelector::count_column("id"));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT COUNT(id) FROM users");
     }
-    
+
     #[test]
     fn test_count_distinct() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select(ColumnSelector::count_distinct("email"));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT COUNT(DISTINCT email) FROM users");
     }
-    
+
     #[test]
     fn test_sum_function() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select(ColumnSelector::sum("total"));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT SUM(total) FROM orders");
     }
-    
+
     #[test]
     fn test_avg_function() {
-        let query = SelectBuilder::new("products")
+        let query = from("products")
             .select(ColumnSelector::avg("price"));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT AVG(price) FROM products");
     }
-    
+
     #[test]
     fn test_min_function() {
-        let query = SelectBuilder::new("products")
+        let query = from("products")
             .select(ColumnSelector::min("price"));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT MIN(price) FROM products");
     }
-    
+
     #[test]
     fn test_max_function() {
-        let query = SelectBuilder::new("products")
+        let query = from("products")
             .select(ColumnSelector::max("price"));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT MAX(price) FROM products");
     }
-    
+
     #[test]
     fn test_aggregation_with_alias() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select(ColumnSelector::sum("total").as_alias("total_sales"));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT SUM(total) AS total_sales FROM orders");
     }
-    
+
     #[test]
     fn test_mixed_columns_and_aggregations() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select(vec![
                 ColumnSelector::Column("status".to_string()),
                 ColumnSelector::count().as_alias("count"),
                 ColumnSelector::sum("total").as_alias("total_sales")
             ]);
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT status, COUNT(*) AS count, SUM(total) AS total_sales FROM orders");
     }
-    
+
     #[test]
     fn test_aggregation_with_group_by() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select(vec![
                 ColumnSelector::Column("status".to_string()),
                 ColumnSelector::count().as_alias("count"),
@@ -2397,7 +2453,7 @@ mod tests {
     
     #[test]
     fn test_aggregation_with_joins() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select(vec![
                 ColumnSelector::Column("users.name".to_string()),
                 ColumnSelector::count().as_alias("order_count")
@@ -2411,7 +2467,7 @@ mod tests {
     
     #[test]
     fn test_complex_aggregation_query() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select(vec![
                 ColumnSelector::Column("customer_id".to_string()),
                 ColumnSelector::Column("status".to_string()),
@@ -2434,7 +2490,7 @@ mod tests {
     // HAVING clause tests
     #[test]
     fn test_having_basic() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select(vec![
                 ColumnSelector::Column("status".to_string()),
                 ColumnSelector::count().as_alias("count")
@@ -2448,7 +2504,7 @@ mod tests {
     
     #[test]
     fn test_having_with_sum() {
-        let query = SelectBuilder::new("sales")
+        let query = from("sales")
             .select(vec![
                 ColumnSelector::Column("region".to_string()),
                 ColumnSelector::sum("amount").as_alias("total_sales")
@@ -2462,7 +2518,7 @@ mod tests {
     
     #[test]
     fn test_having_with_avg() {
-        let query = SelectBuilder::new("products")
+        let query = from("products")
             .select(vec![
                 ColumnSelector::Column("category".to_string()),
                 ColumnSelector::avg("price").as_alias("avg_price")
@@ -2476,7 +2532,7 @@ mod tests {
     
     #[test]
     fn test_multiple_having_conditions() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select(vec![
                 ColumnSelector::Column("customer_id".to_string()),
                 ColumnSelector::count().as_alias("order_count"),
@@ -2492,7 +2548,7 @@ mod tests {
     
     #[test]
     fn test_having_with_or_condition() {
-        let query = SelectBuilder::new("products")
+        let query = from("products")
             .select(vec![
                 ColumnSelector::Column("category".to_string()),
                 ColumnSelector::count().as_alias("product_count"),
@@ -2508,7 +2564,7 @@ mod tests {
     
     #[test]
     fn test_having_with_where_and_group_by() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select(vec![
                 ColumnSelector::Column("status".to_string()),
                 ColumnSelector::count().as_alias("count"),
@@ -2524,7 +2580,7 @@ mod tests {
     
     #[test]
     fn test_having_with_joins() {
-        let query = SelectBuilder::new("users")
+        let query = from("users")
             .select(vec![
                 ColumnSelector::Column("users.department".to_string()),
                 ColumnSelector::count().as_alias("user_count"),
@@ -2541,7 +2597,7 @@ mod tests {
     
     #[test]
     fn test_having_with_order_by() {
-        let query = SelectBuilder::new("products")
+        let query = from("products")
             .select(vec![
                 ColumnSelector::Column("category".to_string()),
                 ColumnSelector::count().as_alias("product_count"),
@@ -2558,7 +2614,7 @@ mod tests {
     
     #[test]
     fn test_complex_having_query() {
-        let query = SelectBuilder::new("sales")
+        let query = from("sales")
             .select(vec![
                 ColumnSelector::Column("region".to_string()),
                 ColumnSelector::Column("quarter".to_string()),
@@ -2586,7 +2642,7 @@ mod tests {
     
     #[test]
     fn test_having_count_distinct() {
-        let query = SelectBuilder::new("orders")
+        let query = from("orders")
             .select(vec![
                 ColumnSelector::Column("region".to_string()),
                 ColumnSelector::count_distinct("customer_id").as_alias("unique_customers"),
@@ -2602,164 +2658,168 @@ mod tests {
     // Subquery tests
     #[test]
     fn test_subquery_in_select() {
-        let subquery = SelectBuilder::new("orders")
+        let subquery = from("orders")
             .select("total")
             .where_(("customer_id", 1))
             .limit(1);
-        
-        let query = SelectBuilder::new("customers")
+
+        let query = from("customers")
             .select(vec![
                 ColumnSelector::Column("name".to_string()),
                 ColumnSelector::subquery_as(subquery, "latest_order_total")
             ]);
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT name, (SELECT total FROM orders WHERE customer_id = ? LIMIT 1) AS latest_order_total FROM customers");
     }
-    
+
     #[test]
     fn test_where_in_subquery() {
-        let subquery = SelectBuilder::new("orders")
+        let subquery = from("orders")
             .select("customer_id")
             .where_(("status", "completed"));
-            
-        let query = SelectBuilder::new("customers")
-            .where_in("id", subquery);
-            
+
+        let query = from("customers")
+            .where_in("id", subquery)
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE status = ?)");
     }
-    
+
     #[test]
     fn test_where_not_in_subquery() {
-        let subquery = SelectBuilder::new("cancelled_orders")
+        let subquery = from("cancelled_orders")
             .select("customer_id");
-            
-        let query = SelectBuilder::new("customers")
-            .where_not_in("id", subquery);
-            
+
+        let query = from("customers")
+            .where_not_in("id", subquery)
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM customers WHERE id NOT IN (SELECT customer_id FROM cancelled_orders)");
     }
-    
+
     #[test]
     fn test_where_exists_subquery() {
-        let subquery = SelectBuilder::new("orders")
+        let subquery = from("orders")
             .select("1")
             .where_(("orders.customer_id = customers.id", ""));
-            
-        let query = SelectBuilder::new("customers")
-            .where_exists(subquery);
-            
+
+        let query = from("customers")
+            .where_exists(subquery)
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM customers WHERE EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customers.id = ?)");
     }
-    
+
     #[test]
     fn test_where_not_exists_subquery() {
-        let subquery = SelectBuilder::new("orders")
+        let subquery = from("orders")
             .select("1")
             .where_(("orders.customer_id = customers.id", ""));
-            
-        let query = SelectBuilder::new("customers")
-            .where_not_exists(subquery);
-            
+
+        let query = from("customers")
+            .where_not_exists(subquery)
+            .select("*");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM customers WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customers.id = ?)");
     }
-    
+
     #[test]
     fn test_mixed_where_and_subquery_conditions() {
-        let subquery = SelectBuilder::new("orders")
+        let subquery = from("orders")
             .select("customer_id")
             .where_(("total", op::GT, 100));
-            
-        let query = SelectBuilder::new("customers")
+
+        let query = from("customers")
             .where_(("active", true))
             .where_in("id", subquery);
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM customers WHERE active = ? AND id IN (SELECT customer_id FROM orders WHERE total > ?)");
     }
-    
+
     #[test]
     fn test_nested_subqueries() {
-        let inner_subquery = SelectBuilder::new("order_items")
+        let inner_subquery = from("order_items")
             .select("order_id")
             .where_(("product_id", 1));
-            
-        let outer_subquery = SelectBuilder::new("orders")
+
+        let outer_subquery = from("orders")
             .select("customer_id")
             .where_in("id", inner_subquery);
-            
-        let query = SelectBuilder::new("customers")
+
+        let query = from("customers")
             .where_in("id", outer_subquery);
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE id IN (SELECT order_id FROM order_items WHERE product_id = ?))");
     }
-    
+
     #[test]
     fn test_subquery_with_aggregation() {
-        let avg_subquery = SelectBuilder::new("orders")
+        let avg_subquery = from("orders")
             .select(ColumnSelector::avg("total").as_alias("avg_total"));
-            
-        let query = SelectBuilder::new("customers")
+
+        let query = from("customers")
             .select(vec![
                 ColumnSelector::Column("name".to_string()),
                 ColumnSelector::subquery_as(avg_subquery, "avg_order_total")
             ]);
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT name, (SELECT AVG(total) AS avg_total FROM orders) AS avg_order_total FROM customers");
     }
-    
+
     #[test]
     fn test_complex_subquery_with_joins() {
-        let subquery = SelectBuilder::new("orders")
-            .select(ColumnSelector::sum("order_items.quantity"))
+        let subquery = from("orders")
             .inner_join("order_items", "orders.id", "order_items.order_id")
+            .select(ColumnSelector::sum("order_items.quantity"))
             .where_(("orders.customer_id", 1))
             .group_by("orders.customer_id");
-            
-        let query = SelectBuilder::new("customers")
+
+        let query = from("customers")
             .select(vec![
                 ColumnSelector::Column("name".to_string()),
                 ColumnSelector::subquery_as(subquery, "total_items_ordered")
             ]);
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT name, (SELECT SUM(order_items.quantity) FROM orders INNER JOIN order_items ON orders.id = order_items.order_id WHERE orders.customer_id = ? GROUP BY orders.customer_id) AS total_items_ordered FROM customers");
     }
-    
+
     #[test]
     fn test_subquery_with_multiple_conditions() {
-        let subquery = SelectBuilder::new("orders")
+        let subquery = from("orders")
             .select("customer_id")
             .where_(("status", "completed"))
             .and_where(("total", op::GT, 50));
-            
-        let query = SelectBuilder::new("customers")
+
+        let query = from("customers")
             .select("name")
             .where_in("id", subquery)
             .where_(("active", true));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT name FROM customers WHERE active = ? AND id IN (SELECT customer_id FROM orders WHERE status = ? AND total > ?)");
     }
-    
+
     #[test]
     fn test_mixed_tuple_column_selectors() {
         // Test all our new mixed tuple implementations
-        
+
         // (&str, ColumnSelector)
-        let query1 = SelectBuilder::new("users")
+        let query1 = from("users")
             .select(("name", ColumnSelector::count()));
         let sql1 = query1.to_sql().unwrap();
         assert_eq!(sql1, "SELECT name, COUNT(*) FROM users");
-        
+
         // (&str, ColumnSelector, ColumnSelector) - the main one we wanted!
-        let query2 = SelectBuilder::new("users")
+        let query2 = from("users")
             .select((
                 "name",
                 ColumnSelector::count().as_alias("total"),
@@ -2767,9 +2827,9 @@ mod tests {
             ));
         let sql2 = query2.to_sql().unwrap();
         assert_eq!(sql2, "SELECT name, COUNT(*) AS total, AVG(rating) AS avg_rating FROM users");
-        
+
         // (ColumnSelector, &str, ColumnSelector)
-        let query3 = SelectBuilder::new("products")
+        let query3 = from("products")
             .select((
                 ColumnSelector::sum("price").as_alias("total_price"),
                 "category",
@@ -2777,9 +2837,9 @@ mod tests {
             ));
         let sql3 = query3.to_sql().unwrap();
         assert_eq!(sql3, "SELECT SUM(price) AS total_price, category, COUNT(*) FROM products");
-        
+
         // (ColumnSelector, ColumnSelector, ColumnSelector)
-        let query4 = SelectBuilder::new("sales")
+        let query4 = from("sales")
             .select((
                 ColumnSelector::sum("amount"),
                 ColumnSelector::avg("amount"),
@@ -2788,16 +2848,16 @@ mod tests {
         let sql4 = query4.to_sql().unwrap();
         assert_eq!(sql4, "SELECT SUM(amount), AVG(amount), COUNT(*) FROM sales");
     }
-    
+
     #[test]
     fn test_helper_functions() {
         use crate::{from, update, delete};
-        
-        // Test from() helper 
-        let select_query = from("users").where_(("active", true));
+
+        // Test from() helper
+        let select_query = from("users").select("*").where_(("active", true));
         let sql = select_query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users WHERE active = ?");
-        
+
         // Test update() helper
         let mut updates = std::collections::HashMap::new();
         updates.insert("name".to_string(), crate::Value::String("John".to_string()));
@@ -2806,8 +2866,8 @@ mod tests {
             .where_(("id", 1));
         let sql = update_query.to_sql().unwrap();
         assert_eq!(sql, "UPDATE users SET name = ? WHERE id = ?");
-        
-        // Test delete() helper  
+
+        // Test delete() helper
         let delete_query = delete("users").where_(("inactive", true));
         let sql = delete_query.to_sql().unwrap();
         assert_eq!(sql, "DELETE FROM users WHERE inactive = ?");

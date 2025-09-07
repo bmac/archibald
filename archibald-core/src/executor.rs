@@ -317,7 +317,7 @@ impl ExecutableModification for crate::UpdateBuilder {
 }
 
 // Implementation for DeleteBuilder
-impl ExecutableModification for crate::DeleteBuilder {
+impl ExecutableModification for crate::DeleteBuilderComplete {
     async fn execute<P>(self, pool: &P) -> Result<u64>
     where
         P: ConnectionPool,
@@ -978,7 +978,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_fetch_one() {
         let pool = MockPool::new();
-        let query = from("users").where_(("id", 1));
+        let query = from("users").select("*").where_(("id", 1));
         
         let user: User = query.fetch_one(&pool).await.unwrap();
         assert_eq!(user.id, 1);
@@ -988,7 +988,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_fetch_optional() {
         let pool = MockPool::new();
-        let query = from("users").where_(("id", 1));
+        let query = from("users").select("*").where_(("id", 1));
         
         let user: Option<User> = query.fetch_optional(&pool).await.unwrap();
         assert!(user.is_some());
@@ -1028,7 +1028,7 @@ mod tests {
     async fn test_delete_execute() {
         let pool = MockPool::new();
         
-        let query = crate::DeleteBuilder::new("users")
+        let query = crate::delete("users")
             .where_(("age", op::LT, 13));
             
         let affected = query.execute(&pool).await.unwrap();
@@ -1038,7 +1038,7 @@ mod tests {
     #[tokio::test]
     async fn test_connection_failure() {
         let pool = MockPool::with_failure();
-        let query = from("users");
+        let query = from("users").select("*");
         
         let result: Result<Vec<User>> = query.fetch_all(&pool).await;
         assert!(result.is_err());
