@@ -1,5 +1,5 @@
-use archibald_core::{from, insert, op, update};
-use archibald_core::{
+use archibald::{from, insert, op, update};
+use archibald::{
     ConnectionPool, ExecutableModification, ExecutableQuery, IsolationLevel, Transaction,
     TransactionalPool,
 };
@@ -28,15 +28,15 @@ struct MockPool;
 impl ConnectionPool for MockPool {
     type Connection = ();
 
-    async fn acquire(&self) -> archibald_core::Result<Self::Connection> {
+    async fn acquire(&self) -> archibald::Result<Self::Connection> {
         Ok(())
     }
 
     async fn execute(
         &self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<u64> {
+        _params: &[archibald::Value],
+    ) -> archibald::Result<u64> {
         println!("   EXECUTE: {}", sql);
         Ok(1) // Simulate 1 affected row
     }
@@ -44,8 +44,8 @@ impl ConnectionPool for MockPool {
     async fn fetch_all<T>(
         &self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<Vec<T>>
+        _params: &[archibald::Value],
+    ) -> archibald::Result<Vec<T>>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {
@@ -56,8 +56,8 @@ impl ConnectionPool for MockPool {
     async fn fetch_one<T>(
         &self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<T>
+        _params: &[archibald::Value],
+    ) -> archibald::Result<T>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {
@@ -68,7 +68,7 @@ impl ConnectionPool for MockPool {
             let user: T = serde_json::from_value(user_json)?;
             Ok(user)
         } else {
-            return Err(archibald_core::Error::sql_generation(
+            return Err(archibald::Error::sql_generation(
                 "No mock data for this type",
             ));
         }
@@ -77,8 +77,8 @@ impl ConnectionPool for MockPool {
     async fn fetch_optional<T>(
         &self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<Option<T>>
+        _params: &[archibald::Value],
+    ) -> archibald::Result<Option<T>>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {
@@ -94,8 +94,8 @@ impl Transaction for MockTransaction {
     async fn execute(
         &mut self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<u64> {
+        _params: &[archibald::Value],
+    ) -> archibald::Result<u64> {
         println!("   TXN EXECUTE: {}", sql);
         Ok(1)
     }
@@ -103,8 +103,8 @@ impl Transaction for MockTransaction {
     async fn fetch_all<T>(
         &mut self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<Vec<T>>
+        _params: &[archibald::Value],
+    ) -> archibald::Result<Vec<T>>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {
@@ -115,8 +115,8 @@ impl Transaction for MockTransaction {
     async fn fetch_one<T>(
         &mut self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<T>
+        _params: &[archibald::Value],
+    ) -> archibald::Result<T>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {
@@ -127,7 +127,7 @@ impl Transaction for MockTransaction {
             let user: T = serde_json::from_value(user_json)?;
             Ok(user)
         } else {
-            return Err(archibald_core::Error::sql_generation(
+            return Err(archibald::Error::sql_generation(
                 "No mock data for this type",
             ));
         }
@@ -136,8 +136,8 @@ impl Transaction for MockTransaction {
     async fn fetch_optional<T>(
         &mut self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<Option<T>>
+        _params: &[archibald::Value],
+    ) -> archibald::Result<Option<T>>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {
@@ -145,27 +145,27 @@ impl Transaction for MockTransaction {
         Ok(None)
     }
 
-    async fn commit(self) -> archibald_core::Result<()> {
+    async fn commit(self) -> archibald::Result<()> {
         println!("   TXN COMMIT");
         Ok(())
     }
 
-    async fn rollback(self) -> archibald_core::Result<()> {
+    async fn rollback(self) -> archibald::Result<()> {
         println!("   TXN ROLLBACK");
         Ok(())
     }
 
-    async fn savepoint(&mut self, name: &str) -> archibald_core::Result<()> {
+    async fn savepoint(&mut self, name: &str) -> archibald::Result<()> {
         println!("   TXN SAVEPOINT: {}", name);
         Ok(())
     }
 
-    async fn rollback_to_savepoint(&mut self, name: &str) -> archibald_core::Result<()> {
+    async fn rollback_to_savepoint(&mut self, name: &str) -> archibald::Result<()> {
         println!("   TXN ROLLBACK TO SAVEPOINT: {}", name);
         Ok(())
     }
 
-    async fn release_savepoint(&mut self, name: &str) -> archibald_core::Result<()> {
+    async fn release_savepoint(&mut self, name: &str) -> archibald::Result<()> {
         println!("   TXN RELEASE SAVEPOINT: {}", name);
         Ok(())
     }
@@ -174,7 +174,7 @@ impl Transaction for MockTransaction {
 impl TransactionalPool for MockPool {
     type Transaction = MockTransaction;
 
-    async fn begin_transaction(&self) -> archibald_core::Result<Self::Transaction> {
+    async fn begin_transaction(&self) -> archibald::Result<Self::Transaction> {
         println!("   BEGIN TRANSACTION");
         Ok(MockTransaction)
     }
@@ -182,7 +182,7 @@ impl TransactionalPool for MockPool {
     async fn begin_transaction_with_isolation(
         &self,
         isolation: IsolationLevel,
-    ) -> archibald_core::Result<Self::Transaction> {
+    ) -> archibald::Result<Self::Transaction> {
         println!("   BEGIN TRANSACTION ({})", isolation.to_sql());
         Ok(MockTransaction)
     }
@@ -321,7 +321,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\\n=== All transaction examples completed! ===");
     println!(
-        "\\nIn production, replace MockPool with archibald_core::executor::postgres::PostgresPool"
+        "\\nIn production, replace MockPool with archibald::executor::postgres::PostgresPool"
     );
 
     Ok(())

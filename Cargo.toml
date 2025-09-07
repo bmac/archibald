@@ -1,13 +1,12 @@
 [workspace]
 members = [
-    "archibald-core",
+    "archibald",
     # "archibald-macros", 
     # "archibald-migrate",
     # "archibald-postgres",
     # "archibald-mysql",
     # "archibald-sqlite",
     # "archibald-derive",
-    # "archibald"
 ]
 resolver = "2"
 

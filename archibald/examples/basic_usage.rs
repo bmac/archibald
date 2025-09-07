@@ -1,5 +1,5 @@
-use archibald_core::{delete, from, insert, op, update, QueryBuilder};
-use archibald_core::{ColumnSelector, SortDirection};
+use archibald::{delete, from, insert, op, update, QueryBuilder};
+use archibald::{ColumnSelector, SortDirection};
 use std::collections::HashMap;
 
 fn main() {
@@ -99,7 +99,7 @@ fn main() {
         .select(("title", "content"))
         .where_((
             "content",
-            archibald_core::Operator::custom("@@"),
+            archibald::Operator::custom("@@"),
             "search & query",
         ))
         .limit(20);

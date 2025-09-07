@@ -39,7 +39,7 @@ impl UpdateBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::update;
+    /// use archibald::update;
     /// use std::collections::HashMap;
     ///
     /// let mut updates = HashMap::new();

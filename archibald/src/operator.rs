@@ -31,7 +31,7 @@ impl Operator {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::Operator;
+    /// use archibald::Operator;
     ///
     /// // PostgreSQL full-text search
     /// let fts_op = Operator::custom("@@");

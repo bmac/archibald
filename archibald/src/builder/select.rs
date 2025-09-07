@@ -224,7 +224,7 @@ impl SelectBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::from;
+    /// use archibald::from;
     ///
     /// let query = from("users").select(("id", "name", "email"));
     /// ```
@@ -272,7 +272,7 @@ impl SelectBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::{from, op};
+    /// use archibald::{from, op};
     ///
     /// let query = from("users")
     ///     .where_(("age", op::GT, 18))
@@ -327,7 +327,7 @@ impl SelectBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::from;
+    /// use archibald::from;
     ///
     /// let subquery = from("orders").select("customer_id").where_(("status", "active"));
     /// let query = from("customers").where_in("id", subquery);
@@ -379,7 +379,7 @@ impl SelectBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::from;
+    /// use archibald::from;
     ///
     /// let query = from("users")
     ///     .inner_join("posts", "users.id", "posts.user_id");
@@ -457,7 +457,7 @@ impl SelectBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::{from, JoinType, op};
+    /// use archibald::{from, JoinType, op};
     ///
     /// let query = from("users")
     ///     .join(JoinType::Left, "profiles", "users.id", op::EQ, "profiles.user_id");
@@ -490,7 +490,7 @@ impl SelectBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::from;
+    /// use archibald::from;
     ///
     /// let query = from("orders").group_by(("customer_id", "status"));
     /// ```
@@ -508,7 +508,7 @@ impl SelectBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::{from, ColumnSelector, op};
+    /// use archibald::{from, ColumnSelector, op};
     ///
     /// let query = from("orders")
     ///     .select(vec![
@@ -569,7 +569,7 @@ impl SelectBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::{from, SortDirection};
+    /// use archibald::{from, SortDirection};
     ///
     /// let query = from("users").order_by("name", SortDirection::Asc);
     /// ```
@@ -585,7 +585,7 @@ impl SelectBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::from;
+    /// use archibald::from;
     ///
     /// let query = from("users").order_by_asc("created_at");
     /// ```
@@ -601,7 +601,7 @@ impl SelectBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::from;
+    /// use archibald::from;
     ///
     /// let query = from("users").order_by_desc("created_at");
     /// ```
@@ -708,7 +708,7 @@ impl SelectBuilderComplete {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::from;
+    /// use archibald::from;
     ///
     /// let query = from("users").select("status").distinct();
     /// ```

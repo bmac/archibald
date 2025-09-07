@@ -1,5 +1,5 @@
-use archibald_core::{delete, from, insert, op, update};
-use archibald_core::{ConnectionPool, ExecutableModification, ExecutableQuery};
+use archibald::{delete, from, insert, op, update};
+use archibald::{ConnectionPool, ExecutableModification, ExecutableQuery};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -25,15 +25,15 @@ struct MockPool;
 impl ConnectionPool for MockPool {
     type Connection = ();
 
-    async fn acquire(&self) -> archibald_core::Result<Self::Connection> {
+    async fn acquire(&self) -> archibald::Result<Self::Connection> {
         Ok(())
     }
 
     async fn execute(
         &self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<u64> {
+        _params: &[archibald::Value],
+    ) -> archibald::Result<u64> {
         println!("EXECUTE: {}", sql);
         Ok(1) // Simulate 1 affected row
     }
@@ -41,8 +41,8 @@ impl ConnectionPool for MockPool {
     async fn fetch_all<T>(
         &self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<Vec<T>>
+        _params: &[archibald::Value],
+    ) -> archibald::Result<Vec<T>>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {
@@ -65,8 +65,8 @@ impl ConnectionPool for MockPool {
     async fn fetch_one<T>(
         &self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<T>
+        _params: &[archibald::Value],
+    ) -> archibald::Result<T>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {
@@ -77,7 +77,7 @@ impl ConnectionPool for MockPool {
             let user: T = serde_json::from_value(user_json)?;
             Ok(user)
         } else {
-            return Err(archibald_core::Error::sql_generation(
+            return Err(archibald::Error::sql_generation(
                 "No mock data for this type",
             ));
         }
@@ -86,8 +86,8 @@ impl ConnectionPool for MockPool {
     async fn fetch_optional<T>(
         &self,
         sql: &str,
-        _params: &[archibald_core::Value],
-    ) -> archibald_core::Result<Option<T>>
+        _params: &[archibald::Value],
+    ) -> archibald::Result<Option<T>>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {
@@ -228,7 +228,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Simple transaction (Note: MockPool doesn't implement TransactionalPool)
     // In production, you would use PostgresPool which supports transactions:
     /*
-    use archibald_core::{transaction, executor::postgres::PostgresPool};
+    use archibald::{transaction, executor::postgres::PostgresPool};
 
     let pg_pool = PostgresPool::new("postgresql://...").await?;
 

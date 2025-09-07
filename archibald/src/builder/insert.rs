@@ -32,7 +32,7 @@ impl InsertBuilderInitial {
     ///
     /// # Examples
     /// ```
-    /// use archibald_core::insert;
+    /// use archibald::insert;
     /// use std::collections::HashMap;
     ///
     /// let mut data = HashMap::new();

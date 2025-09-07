@@ -1,7 +1,7 @@
-//! Archibald Core - A type-safe SQL query builder inspired by knex.js
+//! Archibald - A type-safe SQL query builder for Rust inspired by knex.js
 //!
-//! This crate provides the core functionality for building SQL queries in a
-//! fluent, immutable, and type-safe manner.
+//! Archibald provides a fluent, immutable, and type-safe API for building SQL queries
+//! with compile-time guarantees and an intuitive builder pattern.
 
 pub mod builder;
 pub mod error;
