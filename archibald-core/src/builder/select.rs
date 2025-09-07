@@ -1,11 +1,11 @@
 //! SELECT query builder implementation
 
-use crate::{Result, Error, Value, IntoOperator};
 use super::common::{
-    QueryBuilder, IntoCondition, WhereCondition, WhereConnector, 
-    AggregateFunction, IntoColumns, IntoColumnSelectors, JoinType, JoinConnector, JoinClause,
-    SortDirection, OrderByClause, GroupByClause, HavingCondition
+    AggregateFunction, GroupByClause, HavingCondition, IntoColumnSelectors, IntoColumns,
+    IntoCondition, JoinClause, JoinConnector, JoinType, OrderByClause, QueryBuilder, SortDirection,
+    WhereCondition, WhereConnector,
 };
+use crate::{Error, IntoOperator, Result, Value};
 
 /// Column selector that can be a regular column or an aggregation
 #[derive(Debug, Clone)]
@@ -34,7 +34,7 @@ impl ColumnSelector {
     /// Create a COUNT(*) selector with alias
     pub fn count_as(alias: &str) -> Self {
         Self::CountAll {
-            alias: Some(alias.to_string())
+            alias: Some(alias.to_string()),
         }
     }
 
@@ -99,19 +99,27 @@ impl ColumnSelector {
                 // For regular columns, we can't easily add an alias to the current enum variant
                 // This would require restructuring the enum. For now, leave as-is
                 self
-            },
-            Self::Aggregate { alias: ref mut alias_field, .. } => {
+            }
+            Self::Aggregate {
+                alias: ref mut alias_field,
+                ..
+            } => {
                 *alias_field = Some(alias.to_string());
                 self
-            },
-            Self::CountAll { alias: ref mut alias_field } => {
+            }
+            Self::CountAll {
+                alias: ref mut alias_field,
+            } => {
                 *alias_field = Some(alias.to_string());
                 self
-            },
-            Self::SubqueryColumn { alias: ref mut alias_field, .. } => {
+            }
+            Self::SubqueryColumn {
+                alias: ref mut alias_field,
+                ..
+            } => {
                 *alias_field = Some(alias.to_string());
                 self
-            },
+            }
         }
     }
 
@@ -282,7 +290,8 @@ impl SelectBuilderInitial {
             value,
             connector: WhereConnector::And,
         });
-        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
+        self.parameters
+            .push(self.where_conditions.last().unwrap().value.clone());
 
         self
     }
@@ -300,7 +309,8 @@ impl SelectBuilderInitial {
             value,
             connector: WhereConnector::Or,
         });
-        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
+        self.parameters
+            .push(self.where_conditions.last().unwrap().value.clone());
 
         self
     }
@@ -452,7 +462,14 @@ impl SelectBuilderInitial {
     /// let query = from("users")
     ///     .join(JoinType::Left, "profiles", "users.id", op::EQ, "profiles.user_id");
     /// ```
-    pub fn join<O>(mut self, join_type: JoinType, table: &str, left_col: &str, operator: O, right_col: &str) -> Self
+    pub fn join<O>(
+        mut self,
+        join_type: JoinType,
+        table: &str,
+        left_col: &str,
+        operator: O,
+        right_col: &str,
+    ) -> Self
     where
         O: IntoOperator,
     {
@@ -623,7 +640,8 @@ impl SelectBuilderComplete {
             value,
             connector: WhereConnector::And,
         });
-        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
+        self.parameters
+            .push(self.where_conditions.last().unwrap().value.clone());
 
         self
     }
@@ -641,7 +659,8 @@ impl SelectBuilderComplete {
             value,
             connector: WhereConnector::Or,
         });
-        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
+        self.parameters
+            .push(self.where_conditions.last().unwrap().value.clone());
 
         self
     }
@@ -817,7 +836,14 @@ impl SelectBuilderComplete {
     }
 
     /// Generic JOIN method with custom join type and operator
-    pub fn join<O>(mut self, join_type: JoinType, table: &str, left_col: &str, operator: O, right_col: &str) -> Self
+    pub fn join<O>(
+        mut self,
+        join_type: JoinType,
+        table: &str,
+        left_col: &str,
+        operator: O,
+        right_col: &str,
+    ) -> Self
     where
         O: IntoOperator,
     {
@@ -896,7 +922,9 @@ impl SelectBuilderComplete {
 
 impl QueryBuilder for SelectBuilderInitial {
     fn to_sql(&self) -> Result<String> {
-        Err(Error::invalid_query("SELECT requires columns to be specified with .select()"))
+        Err(Error::invalid_query(
+            "SELECT requires columns to be specified with .select()",
+        ))
     }
 
     fn parameters(&self) -> &[Value] {
@@ -923,7 +951,7 @@ impl QueryBuilder for SelectBuilderComplete {
 
         // SELECT clause
         sql.push_str("SELECT ");
-        
+
         if self.distinct {
             sql.push_str("DISTINCT ");
         }
@@ -936,7 +964,11 @@ impl QueryBuilder for SelectBuilderComplete {
             for col in &self.selected_columns {
                 let part = match col {
                     ColumnSelector::Column(name) => name.clone(),
-                    ColumnSelector::Aggregate { function, column, alias } => {
+                    ColumnSelector::Aggregate {
+                        function,
+                        column,
+                        alias,
+                    } => {
                         let func_sql = match function {
                             AggregateFunction::CountDistinct => {
                                 format!("{}({}))", function, column)
@@ -981,10 +1013,10 @@ impl QueryBuilder for SelectBuilderComplete {
             sql.push_str(&join.join_type.to_string());
             sql.push_str(" JOIN ");
             sql.push_str(&join.table);
-            
+
             if !join.on_conditions.is_empty() {
                 sql.push_str(" ON ");
-                
+
                 for (i, condition) in join.on_conditions.iter().enumerate() {
                     if i > 0 {
                         match condition.connector {
@@ -992,7 +1024,7 @@ impl QueryBuilder for SelectBuilderComplete {
                             JoinConnector::Or => sql.push_str(" OR "),
                         }
                     }
-                    
+
                     sql.push_str(&condition.left_column);
                     sql.push(' ');
                     sql.push_str(condition.operator.as_str());
@@ -1072,7 +1104,8 @@ impl QueryBuilder for SelectBuilderComplete {
         // ORDER BY clause
         if !self.order_by_clauses.is_empty() {
             sql.push_str(" ORDER BY ");
-            let order_parts: Vec<String> = self.order_by_clauses
+            let order_parts: Vec<String> = self
+                .order_by_clauses
                 .iter()
                 .map(|clause| format!("{} {}", clause.column, clause.direction))
                 .collect();
@@ -1104,8 +1137,8 @@ impl QueryBuilder for SelectBuilderComplete {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::operator::op;
     use crate::from;
+    use crate::operator::op;
 
     #[test]
     fn test_basic_select() {
@@ -1150,21 +1183,22 @@ mod tests {
 
     #[test]
     fn test_limit_and_offset() {
-        let query = from("users")
-            .select("*")
-            .limit(10)
-            .offset(5);
+        let query = from("users").select("*").limit(10).offset(5);
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users LIMIT 10 OFFSET 5");
     }
 
     #[test]
     fn test_inner_join() {
-        let query = from("users")
-            .select("*")
-            .inner_join("profiles", "users.id", "profiles.user_id");
+        let query =
+            from("users")
+                .select("*")
+                .inner_join("profiles", "users.id", "profiles.user_id");
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id"
+        );
     }
 
     #[test]
@@ -1173,16 +1207,23 @@ mod tests {
             .select("*")
             .left_join("profiles", "users.id", "profiles.user_id");
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users LEFT JOIN profiles ON users.id = profiles.user_id");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users LEFT JOIN profiles ON users.id = profiles.user_id"
+        );
     }
 
     #[test]
     fn test_right_join() {
-        let query = from("users")
-            .select("*")
-            .right_join("profiles", "users.id", "profiles.user_id");
+        let query =
+            from("users")
+                .select("*")
+                .right_join("profiles", "users.id", "profiles.user_id");
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users RIGHT JOIN profiles ON users.id = profiles.user_id");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users RIGHT JOIN profiles ON users.id = profiles.user_id"
+        );
     }
 
     #[test]
@@ -1196,63 +1237,56 @@ mod tests {
 
     #[test]
     fn test_order_by_asc() {
-        let query = from("users")
-            .select("*")
-            .order_by_asc("name");
+        let query = from("users").select("*").order_by_asc("name");
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC");
     }
 
     #[test]
     fn test_order_by_desc() {
-        let query = from("users")
-            .select("*")
-            .order_by_desc("created_at");
+        let query = from("users").select("*").order_by_desc("created_at");
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC");
     }
 
     #[test]
     fn test_group_by_single_column() {
-        let query = from("users")
-            .select("*")
-            .group_by("department");
+        let query = from("users").select("*").group_by("department");
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users GROUP BY department");
     }
 
     #[test]
     fn test_group_by_multiple_columns() {
-        let query = from("users")
-            .select("*")
-            .group_by(("department", "status"));
+        let query = from("users").select("*").group_by(("department", "status"));
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users GROUP BY department, status");
     }
 
     #[test]
     fn test_distinct_basic() {
-        let query = from("users")
-            .select("status")
-            .distinct();
+        let query = from("users").select("status").distinct();
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT status FROM users");
     }
 
     #[test]
     fn test_having_basic() {
-        let query = from("users")
-            .select("*")
-            .group_by("department")
-            .having(("COUNT(*)", op::GT, 5));
+        let query =
+            from("users")
+                .select("*")
+                .group_by("department")
+                .having(("COUNT(*)", op::GT, 5));
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users GROUP BY department HAVING COUNT(*) > ?");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users GROUP BY department HAVING COUNT(*) > ?"
+        );
     }
 
     #[test]
     fn test_avg_function() {
-        let query = from("products")
-            .select(ColumnSelector::avg("price"));
+        let query = from("products").select(ColumnSelector::avg("price"));
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT AVG(price) FROM products");
@@ -1260,8 +1294,7 @@ mod tests {
 
     #[test]
     fn test_min_function() {
-        let query = from("products")
-            .select(ColumnSelector::min("price"));
+        let query = from("products").select(ColumnSelector::min("price"));
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT MIN(price) FROM products");
@@ -1269,8 +1302,7 @@ mod tests {
 
     #[test]
     fn test_max_function() {
-        let query = from("products")
-            .select(ColumnSelector::max("price"));
+        let query = from("products").select(ColumnSelector::max("price"));
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT MAX(price) FROM products");
@@ -1278,8 +1310,7 @@ mod tests {
 
     #[test]
     fn test_sum_function() {
-        let query = from("orders")
-            .select(ColumnSelector::sum("total"));
+        let query = from("orders").select(ColumnSelector::sum("total"));
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT SUM(total) FROM orders");
@@ -1287,8 +1318,7 @@ mod tests {
 
     #[test]
     fn test_aggregation_with_alias() {
-        let query = from("orders")
-            .select(ColumnSelector::sum("total").as_alias("total_sales"));
+        let query = from("orders").select(ColumnSelector::sum("total").as_alias("total_sales"));
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT SUM(total) AS total_sales FROM orders");
@@ -1296,8 +1326,7 @@ mod tests {
 
     #[test]
     fn test_count_all() {
-        let query = from("users")
-            .select(ColumnSelector::count());
+        let query = from("users").select(ColumnSelector::count());
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT COUNT(*) FROM users");
@@ -1305,8 +1334,7 @@ mod tests {
 
     #[test]
     fn test_count_all_with_alias() {
-        let query = from("users")
-            .select(ColumnSelector::count_as("total_users"));
+        let query = from("users").select(ColumnSelector::count_as("total_users"));
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT COUNT(*) AS total_users FROM users");
@@ -1314,8 +1342,7 @@ mod tests {
 
     #[test]
     fn test_count_column() {
-        let query = from("users")
-            .select(ColumnSelector::count_column("email"));
+        let query = from("users").select(ColumnSelector::count_column("email"));
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT COUNT(email) FROM users");
@@ -1323,8 +1350,7 @@ mod tests {
 
     #[test]
     fn test_count_distinct() {
-        let query = from("orders")
-            .select(ColumnSelector::count_distinct("customer_id"));
+        let query = from("orders").select(ColumnSelector::count_distinct("customer_id"));
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT COUNT(DISTINCT(customer_id)) FROM orders");
@@ -1332,22 +1358,24 @@ mod tests {
 
     #[test]
     fn test_cross_join() {
-        let query = from("users")
-            .select("*")
-            .cross_join("categories");
-        
+        let query = from("users").select("*").cross_join("categories");
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users CROSS JOIN categories");
     }
 
     #[test]
     fn test_full_outer_join() {
-        let query = from("users")
-            .select("*")
-            .full_outer_join("profiles", "users.id", "profiles.user_id");
-        
+        let query =
+            from("users")
+                .select("*")
+                .full_outer_join("profiles", "users.id", "profiles.user_id");
+
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users FULL OUTER JOIN profiles ON users.id = profiles.user_id");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users FULL OUTER JOIN profiles ON users.id = profiles.user_id"
+        );
     }
 
     #[test]
@@ -1356,24 +1384,27 @@ mod tests {
             .select(vec![
                 ColumnSelector::Column("status".to_string()),
                 ColumnSelector::count().as_alias("count"),
-                ColumnSelector::avg("total").as_alias("avg_total")
+                ColumnSelector::avg("total").as_alias("avg_total"),
             ])
             .group_by("status");
-            
+
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT status, COUNT(*) AS count, AVG(total) AS avg_total FROM orders GROUP BY status");
+        assert_eq!(
+            sql,
+            "SELECT status, COUNT(*) AS count, AVG(total) AS avg_total FROM orders GROUP BY status"
+        );
     }
-    
+
     #[test]
     fn test_aggregation_with_joins() {
         let query = from("users")
             .select(vec![
                 ColumnSelector::Column("users.name".to_string()),
-                ColumnSelector::count().as_alias("order_count")
+                ColumnSelector::count().as_alias("order_count"),
             ])
             .left_join("orders", "users.id", "orders.user_id")
             .group_by("users.name");
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT users.name, COUNT(*) AS order_count FROM users LEFT JOIN orders ON users.id = orders.user_id GROUP BY users.name");
     }
@@ -1388,14 +1419,14 @@ mod tests {
                 ColumnSelector::sum("total").as_alias("total_sales"),
                 ColumnSelector::avg("total").as_alias("avg_order_value"),
                 ColumnSelector::min("total").as_alias("min_order"),
-                ColumnSelector::max("total").as_alias("max_order")
+                ColumnSelector::max("total").as_alias("max_order"),
             ])
             .where_(("status", "completed"))
             .group_by(("customer_id", "status"))
             .order_by_asc("customer_id")
             .order_by_desc("total_sales")
             .limit(100);
-            
+
         let sql = query.to_sql().unwrap();
         let expected = "SELECT customer_id, status, COUNT(*) AS order_count, SUM(total) AS total_sales, AVG(total) AS avg_order_value, MIN(total) AS min_order, MAX(total) AS max_order FROM orders WHERE status = ? GROUP BY customer_id, status ORDER BY customer_id ASC, total_sales DESC LIMIT 100";
         assert_eq!(sql, expected);
@@ -1413,7 +1444,7 @@ mod tests {
             .order_by_asc("users.department")
             .order_by_asc("roles.name")
             .limit(20);
-            
+
         let sql = query.to_sql().unwrap();
         let expected = "SELECT DISTINCT users.department, roles.name FROM users INNER JOIN user_roles ON users.id = user_roles.user_id INNER JOIN roles ON user_roles.role_id = roles.id WHERE users.active = ? AND roles.active = ? ORDER BY users.department ASC, roles.name ASC LIMIT 20";
         assert_eq!(sql, expected);
@@ -1439,20 +1470,21 @@ mod tests {
     fn test_complex_where_combinations() {
         let query = from("users")
             .select("*")
-            .where_(("age", op::GTE, 18))     // First condition (AND by default)
-            .and_where(("status", "active"))  // Explicit AND
-            .or_where(("role", "admin"))      // OR condition
-            .and_where(("verified", true));   // Back to AND
+            .where_(("age", op::GTE, 18)) // First condition (AND by default)
+            .and_where(("status", "active")) // Explicit AND
+            .or_where(("role", "admin")) // OR condition
+            .and_where(("verified", true)); // Back to AND
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users WHERE age >= ? AND status = ? OR role = ? AND verified = ?");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users WHERE age >= ? AND status = ? OR role = ? AND verified = ?"
+        );
     }
 
     #[test]
     fn test_distinct_all_columns() {
-        let query = from("users")
-            .select("*")
-            .distinct();
+        let query = from("users").select("*").distinct();
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT * FROM users");
@@ -1475,9 +1507,7 @@ mod tests {
 
     #[test]
     fn test_distinct_multiple_columns() {
-        let query = from("users")
-            .select(("status", "role"))
-            .distinct();
+        let query = from("users").select(("status", "role")).distinct();
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT status, role FROM users");
@@ -1491,15 +1521,19 @@ mod tests {
             .distinct();
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT DISTINCT customer_id FROM orders GROUP BY customer_id");
+        assert_eq!(
+            sql,
+            "SELECT DISTINCT customer_id FROM orders GROUP BY customer_id"
+        );
     }
 
     #[test]
     fn test_distinct_with_join() {
-        let query = from("users")
-            .select("users.role")
-            .distinct()
-            .inner_join("departments", "users.dept_id", "departments.id");
+        let query = from("users").select("users.role").distinct().inner_join(
+            "departments",
+            "users.dept_id",
+            "departments.id",
+        );
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT users.role FROM users INNER JOIN departments ON users.dept_id = departments.id");
@@ -1507,10 +1541,7 @@ mod tests {
 
     #[test]
     fn test_distinct_with_limit() {
-        let query = from("users")
-            .select("department")
-            .distinct()
-            .limit(5);
+        let query = from("users").select("department").distinct().limit(5);
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT department FROM users LIMIT 5");
@@ -1535,9 +1566,11 @@ mod tests {
             .distinct();
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT DISTINCT department FROM users WHERE active = ?");
+        assert_eq!(
+            sql,
+            "SELECT DISTINCT department FROM users WHERE active = ?"
+        );
     }
-
 
     #[test]
     fn test_group_by_with_order_by() {
@@ -1547,7 +1580,10 @@ mod tests {
             .order_by_asc("status");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT status FROM orders GROUP BY status ORDER BY status ASC");
+        assert_eq!(
+            sql,
+            "SELECT status FROM orders GROUP BY status ORDER BY status ASC"
+        );
     }
 
     #[test]
@@ -1558,7 +1594,10 @@ mod tests {
             .group_by("status");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT status FROM orders WHERE active = ? GROUP BY status");
+        assert_eq!(
+            sql,
+            "SELECT status FROM orders WHERE active = ? GROUP BY status"
+        );
     }
 
     #[test]
@@ -1567,11 +1606,11 @@ mod tests {
             .select(vec![
                 ColumnSelector::Column("region".to_string()),
                 ColumnSelector::count_distinct("customer_id").as_alias("unique_customers"),
-                ColumnSelector::sum("total").as_alias("total_sales")
+                ColumnSelector::sum("total").as_alias("total_sales"),
             ])
             .group_by("region")
             .having(("COUNT(DISTINCT customer_id)", op::GT, 100));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT region, COUNT(DISTINCT(customer_id)) AS unique_customers, SUM(total) AS total_sales FROM orders GROUP BY region HAVING COUNT(DISTINCT customer_id) > ?");
     }
@@ -1581,11 +1620,11 @@ mod tests {
         let query = from("products")
             .select(vec![
                 ColumnSelector::Column("category".to_string()),
-                ColumnSelector::avg("price").as_alias("avg_price")
+                ColumnSelector::avg("price").as_alias("avg_price"),
             ])
             .group_by("category")
             .having(("AVG(price)", op::LT, 100.0));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT category, AVG(price) AS avg_price FROM products GROUP BY category HAVING AVG(price) < ?");
     }
@@ -1596,12 +1635,12 @@ mod tests {
             .select(vec![
                 ColumnSelector::Column("users.department".to_string()),
                 ColumnSelector::count().as_alias("user_count"),
-                ColumnSelector::avg("salaries.amount").as_alias("avg_salary")
+                ColumnSelector::avg("salaries.amount").as_alias("avg_salary"),
             ])
             .inner_join("salaries", "users.id", "salaries.user_id")
             .group_by("users.department")
             .having(("COUNT(*)", op::GTE, 5));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT users.department, COUNT(*) AS user_count, AVG(salaries.amount) AS avg_salary FROM users INNER JOIN salaries ON users.id = salaries.user_id GROUP BY users.department HAVING COUNT(*) >= ?");
     }
@@ -1612,12 +1651,12 @@ mod tests {
             .select(vec![
                 ColumnSelector::Column("category".to_string()),
                 ColumnSelector::count().as_alias("product_count"),
-                ColumnSelector::avg("price").as_alias("avg_price")
+                ColumnSelector::avg("price").as_alias("avg_price"),
             ])
             .group_by("category")
             .having(("COUNT(*)", op::GT, 10))
             .or_having(("AVG(price)", op::LT, 50));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT category, COUNT(*) AS product_count, AVG(price) AS avg_price FROM products GROUP BY category HAVING COUNT(*) > ? OR AVG(price) < ?");
     }
@@ -1628,13 +1667,13 @@ mod tests {
             .select(vec![
                 ColumnSelector::Column("category".to_string()),
                 ColumnSelector::count().as_alias("product_count"),
-                ColumnSelector::max("price").as_alias("max_price")
+                ColumnSelector::max("price").as_alias("max_price"),
             ])
             .group_by("category")
             .having(("COUNT(*)", op::GT, 5))
             .order_by_asc("product_count")
             .order_by_desc("max_price");
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT category, COUNT(*) AS product_count, MAX(price) AS max_price FROM products GROUP BY category HAVING COUNT(*) > ? ORDER BY product_count ASC, max_price DESC");
     }
@@ -1644,11 +1683,11 @@ mod tests {
         let query = from("sales")
             .select(vec![
                 ColumnSelector::Column("region".to_string()),
-                ColumnSelector::sum("amount").as_alias("total_sales")
+                ColumnSelector::sum("amount").as_alias("total_sales"),
             ])
             .group_by("region")
             .having(("SUM(amount)", op::GTE, 10000));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT region, SUM(amount) AS total_sales FROM sales GROUP BY region HAVING SUM(amount) >= ?");
     }
@@ -1686,7 +1725,10 @@ mod tests {
             .select("*");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC, created_at DESC, id ASC");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users ORDER BY name ASC, created_at DESC, id ASC"
+        );
     }
 
     #[test]
@@ -1698,7 +1740,10 @@ mod tests {
             .select("*");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at ASC LIMIT 25 OFFSET 50");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users ORDER BY created_at ASC LIMIT 25 OFFSET 50"
+        );
     }
 
     #[test]
@@ -1709,7 +1754,10 @@ mod tests {
             .select("*");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users WHERE active = ? ORDER BY name ASC");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users WHERE active = ? ORDER BY name ASC"
+        );
     }
 
     #[test]
@@ -1726,15 +1774,17 @@ mod tests {
 
     #[test]
     fn test_mixed_columns_and_aggregations() {
-        let query = from("orders")
-            .select(vec![
-                ColumnSelector::Column("status".to_string()),
-                ColumnSelector::count().as_alias("count"),
-                ColumnSelector::sum("total").as_alias("total_sales")
-            ]);
+        let query = from("orders").select(vec![
+            ColumnSelector::Column("status".to_string()),
+            ColumnSelector::count().as_alias("count"),
+            ColumnSelector::sum("total").as_alias("total_sales"),
+        ]);
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT status, COUNT(*) AS count, SUM(total) AS total_sales FROM orders");
+        assert_eq!(
+            sql,
+            "SELECT status, COUNT(*) AS count, SUM(total) AS total_sales FROM orders"
+        );
     }
 
     #[test]
@@ -1743,12 +1793,12 @@ mod tests {
             .select(vec![
                 ColumnSelector::Column("status".to_string()),
                 ColumnSelector::count().as_alias("count"),
-                ColumnSelector::sum("total").as_alias("total_sales")
+                ColumnSelector::sum("total").as_alias("total_sales"),
             ])
             .where_(("created_at", op::GTE, "2023-01-01"))
             .group_by("status")
             .having(("COUNT(*)", op::GT, 5));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT status, COUNT(*) AS count, SUM(total) AS total_sales FROM orders WHERE created_at >= ? GROUP BY status HAVING COUNT(*) > ?");
     }
@@ -1759,12 +1809,12 @@ mod tests {
             .select(vec![
                 ColumnSelector::Column("customer_id".to_string()),
                 ColumnSelector::count().as_alias("order_count"),
-                ColumnSelector::sum("total").as_alias("total_spent")
+                ColumnSelector::sum("total").as_alias("total_spent"),
             ])
             .group_by("customer_id")
             .having(("COUNT(*)", op::GT, 3))
             .and_having(("SUM(total)", op::GTE, 500));
-            
+
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT customer_id, COUNT(*) AS order_count, SUM(total) AS total_spent FROM orders GROUP BY customer_id HAVING COUNT(*) > ? AND SUM(total) >= ?");
     }
@@ -1772,21 +1822,39 @@ mod tests {
     #[test]
     fn test_generic_join_method() {
         let query = from("users")
-            .join(JoinType::Inner, "profiles", "users.id", crate::Operator::EQ, "profiles.user_id")
+            .join(
+                JoinType::Inner,
+                "profiles",
+                "users.id",
+                crate::Operator::EQ,
+                "profiles.user_id",
+            )
             .select("*");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id"
+        );
     }
 
     #[test]
     fn test_join_with_custom_operator() {
         let query = from("users")
-            .join(JoinType::Inner, "profiles", "users.id", op::GT, "profiles.min_user_id")
+            .join(
+                JoinType::Inner,
+                "profiles",
+                "users.id",
+                op::GT,
+                "profiles.min_user_id",
+            )
             .select("*");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id > profiles.min_user_id");
+        assert_eq!(
+            sql,
+            "SELECT * FROM users INNER JOIN profiles ON users.id > profiles.min_user_id"
+        );
     }
 
     #[test]
@@ -1797,11 +1865,10 @@ mod tests {
             .where_(("orders.customer_id", 1))
             .group_by("orders.customer_id");
 
-        let query = from("customers")
-            .select(vec![
-                ColumnSelector::Column("name".to_string()),
-                ColumnSelector::subquery_as(subquery, "total_items_ordered")
-            ]);
+        let query = from("customers").select(vec![
+            ColumnSelector::Column("name".to_string()),
+            ColumnSelector::subquery_as(subquery, "total_items_ordered"),
+        ]);
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT name, (SELECT SUM(order_items.quantity) FROM orders INNER JOIN order_items ON orders.id = order_items.order_id WHERE orders.customer_id = ? GROUP BY orders.customer_id) AS total_items_ordered FROM customers");
@@ -1813,12 +1880,13 @@ mod tests {
             .select("customer_id")
             .where_(("status", "completed"));
 
-        let query = from("customers")
-            .where_in("id", subquery)
-            .select("*");
+        let query = from("customers").where_in("id", subquery).select("*");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE status = ?)");
+        assert_eq!(
+            sql,
+            "SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE status = ?)"
+        );
     }
 
     #[test]
@@ -1828,11 +1896,10 @@ mod tests {
             .where_(("customer_id", 1))
             .limit(1);
 
-        let query = from("customers")
-            .select(vec![
-                ColumnSelector::Column("name".to_string()),
-                ColumnSelector::subquery_as(subquery, "latest_order_total")
-            ]);
+        let query = from("customers").select(vec![
+            ColumnSelector::Column("name".to_string()),
+            ColumnSelector::subquery_as(subquery, "latest_order_total"),
+        ]);
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT name, (SELECT total FROM orders WHERE customer_id = ? LIMIT 1) AS latest_order_total FROM customers");
@@ -1840,13 +1907,9 @@ mod tests {
 
     #[test]
     fn test_where_exists_subquery() {
-        let subquery = from("orders")
-            .select("1")
-            .where_(("orders.customer_id", 1));
+        let subquery = from("orders").select("1").where_(("orders.customer_id", 1));
 
-        let query = from("customers")
-            .where_exists(subquery)
-            .select("*");
+        let query = from("customers").where_exists(subquery).select("*");
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM customers WHERE EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ?)");
@@ -1854,26 +1917,22 @@ mod tests {
 
     #[test]
     fn test_where_not_in_subquery() {
-        let subquery = from("cancelled_orders")
-            .select("customer_id");
+        let subquery = from("cancelled_orders").select("customer_id");
 
-        let query = from("customers")
-            .where_not_in("id", subquery)
-            .select("*");
+        let query = from("customers").where_not_in("id", subquery).select("*");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM customers WHERE id NOT IN (SELECT customer_id FROM cancelled_orders)");
+        assert_eq!(
+            sql,
+            "SELECT * FROM customers WHERE id NOT IN (SELECT customer_id FROM cancelled_orders)"
+        );
     }
 
     #[test]
     fn test_where_not_exists_subquery() {
-        let subquery = from("orders")
-            .select("1")
-            .where_(("orders.customer_id", 1));
+        let subquery = from("orders").select("1").where_(("orders.customer_id", 1));
 
-        let query = from("customers")
-            .where_not_exists(subquery)
-            .select("*");
+        let query = from("customers").where_not_exists(subquery).select("*");
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM customers WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ?)");
@@ -1881,14 +1940,13 @@ mod tests {
 
     #[test]
     fn test_subquery_with_aggregation() {
-        let avg_subquery = from("orders")
-            .select(ColumnSelector::avg("total").as_alias("avg_total"));
+        let avg_subquery =
+            from("orders").select(ColumnSelector::avg("total").as_alias("avg_total"));
 
-        let query = from("customers")
-            .select(vec![
-                ColumnSelector::Column("name".to_string()),
-                ColumnSelector::subquery_as(avg_subquery, "avg_order_total")
-            ]);
+        let query = from("customers").select(vec![
+            ColumnSelector::Column("name".to_string()),
+            ColumnSelector::subquery_as(avg_subquery, "avg_order_total"),
+        ]);
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT name, (SELECT AVG(total) AS avg_total FROM orders) AS avg_order_total FROM customers");
@@ -1920,9 +1978,7 @@ mod tests {
             .select("customer_id")
             .where_in("id", inner_subquery);
 
-        let query = from("customers")
-            .select("*")
-            .where_in("id", outer_subquery);
+        let query = from("customers").select("*").where_in("id", outer_subquery);
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE id IN (SELECT order_id FROM order_items WHERE product_id = ?))");
@@ -1933,30 +1989,33 @@ mod tests {
         // Test all our new mixed tuple implementations
 
         // (&str, ColumnSelector)
-        let query1 = from("users")
-            .select(("name", ColumnSelector::count()));
+        let query1 = from("users").select(("name", ColumnSelector::count()));
         let sql1 = query1.to_sql().unwrap();
         assert_eq!(sql1, "SELECT name, COUNT(*) FROM users");
 
         // (&str, ColumnSelector, ColumnSelector) - the main one we wanted!
-        let query2 = from("users")
-            .select((
-                "name",
-                ColumnSelector::count().as_alias("total"),
-                ColumnSelector::avg("rating").as_alias("avg_rating")
-            ));
+        let query2 = from("users").select((
+            "name",
+            ColumnSelector::count().as_alias("total"),
+            ColumnSelector::avg("rating").as_alias("avg_rating"),
+        ));
         let sql2 = query2.to_sql().unwrap();
-        assert_eq!(sql2, "SELECT name, COUNT(*) AS total, AVG(rating) AS avg_rating FROM users");
+        assert_eq!(
+            sql2,
+            "SELECT name, COUNT(*) AS total, AVG(rating) AS avg_rating FROM users"
+        );
 
         // (ColumnSelector, &str, ColumnSelector)
-        let query3 = from("products")
-            .select((
-                ColumnSelector::sum("price").as_alias("total_price"),
-                "category",
-                ColumnSelector::count()
-            ));
+        let query3 = from("products").select((
+            ColumnSelector::sum("price").as_alias("total_price"),
+            "category",
+            ColumnSelector::count(),
+        ));
         let sql3 = query3.to_sql().unwrap();
-        assert_eq!(sql3, "SELECT SUM(price) AS total_price, category, COUNT(*) FROM products");
+        assert_eq!(
+            sql3,
+            "SELECT SUM(price) AS total_price, category, COUNT(*) FROM products"
+        );
     }
 
     #[test]

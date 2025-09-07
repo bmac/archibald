@@ -1,7 +1,7 @@
 //! INSERT query builder implementations
 
-use crate::{Result, Error, Value};
 use super::common::QueryBuilder;
+use crate::{Error, Result, Value};
 
 /// INSERT query builder in initial state (before values() is called)
 /// Can build conditions but cannot execute queries
@@ -83,7 +83,9 @@ impl InsertBuilderInitial {
 
 impl QueryBuilder for InsertBuilderInitial {
     fn to_sql(&self) -> Result<String> {
-        Err(Error::invalid_query("INSERT requires values to be specified with .values()"))
+        Err(Error::invalid_query(
+            "INSERT requires values to be specified with .values()",
+        ))
     }
 
     fn parameters(&self) -> &[Value] {
@@ -98,7 +100,9 @@ impl QueryBuilder for InsertBuilderInitial {
 impl QueryBuilder for InsertBuilderComplete {
     fn to_sql(&self) -> Result<String> {
         if self.columns.is_empty() || self.values.is_empty() {
-            return Err(crate::Error::invalid_query("INSERT requires columns and values"));
+            return Err(crate::Error::invalid_query(
+                "INSERT requires columns and values",
+            ));
         }
 
         let mut sql = String::new();
@@ -114,7 +118,8 @@ impl QueryBuilder for InsertBuilderComplete {
 
         // VALUES clause
         sql.push_str(" VALUES ");
-        let value_groups: Vec<String> = self.values
+        let value_groups: Vec<String> = self
+            .values
             .iter()
             .map(|row| {
                 let placeholders: Vec<String> = row.iter().map(|_| "?".to_string()).collect();
@@ -164,8 +169,8 @@ mod tests {
         let sql = query.to_sql().unwrap();
         // Note: HashMap iteration order is not guaranteed, so we check both possible orders
         assert!(
-            sql == "INSERT INTO users (name, age) VALUES (?, ?)" ||
-            sql == "INSERT INTO users (age, name) VALUES (?, ?)"
+            sql == "INSERT INTO users (name, age) VALUES (?, ?)"
+                || sql == "INSERT INTO users (age, name) VALUES (?, ?)"
         );
     }
 
@@ -191,6 +196,9 @@ mod tests {
         let query = insert("users");
         let result = query.to_sql();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("INSERT requires values"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("INSERT requires values"));
     }
 }

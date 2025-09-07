@@ -1,7 +1,7 @@
 //! DELETE query builder module
 
-use crate::{Result, Error, Value};
-use super::common::{QueryBuilder, IntoCondition, WhereCondition, WhereConnector};
+use super::common::{IntoCondition, QueryBuilder, WhereCondition, WhereConnector};
+use crate::{Error, Result, Value};
 
 /// DELETE query builder in initial state (before where_() is called)
 /// Can build conditions but cannot execute queries
@@ -102,7 +102,9 @@ impl DeleteBuilderComplete {
 
 impl QueryBuilder for DeleteBuilderInitial {
     fn to_sql(&self) -> Result<String> {
-        Err(Error::invalid_query("DELETE requires WHERE condition for safety"))
+        Err(Error::invalid_query(
+            "DELETE requires WHERE condition for safety",
+        ))
     }
 
     fn parameters(&self) -> &[Value] {
@@ -193,6 +195,9 @@ mod tests {
         let query = delete("users");
         let result = query.to_sql();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("DELETE requires WHERE condition for safety"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("DELETE requires WHERE condition for safety"));
     }
 }

@@ -1,7 +1,7 @@
 //! UPDATE query builder module
 
+use super::common::{IntoCondition, QueryBuilder, WhereCondition, WhereConnector};
 use crate::{Result, Value};
-use super::common::{QueryBuilder, IntoCondition, WhereCondition, WhereConnector};
 
 /// UPDATE query builder
 #[derive(Debug, Clone)]
@@ -58,7 +58,8 @@ impl UpdateBuilder {
             value,
             connector: WhereConnector::And,
         });
-        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
+        self.parameters
+            .push(self.where_conditions.last().unwrap().value.clone());
 
         self
     }
@@ -76,7 +77,8 @@ impl UpdateBuilder {
             value,
             connector: WhereConnector::Or,
         });
-        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
+        self.parameters
+            .push(self.where_conditions.last().unwrap().value.clone());
 
         self
     }
@@ -109,7 +111,8 @@ impl QueryBuilder for UpdateBuilder {
 
         // SET clause
         sql.push_str(" SET ");
-        let set_parts: Vec<String> = self.set_clauses
+        let set_parts: Vec<String> = self
+            .set_clauses
             .iter()
             .map(|(column, _)| format!("{} = ?", column))
             .collect();
@@ -169,9 +172,7 @@ mod tests {
         data.insert("name".to_string(), "John Updated".into());
         data.insert("age".to_string(), 31.into());
 
-        let query = update("users")
-            .set(data)
-            .where_(("id", 1));
+        let query = update("users").set(data).where_(("id", 1));
 
         let sql = query.to_sql().unwrap();
         // Note: HashMap iteration order is not guaranteed
@@ -185,6 +186,9 @@ mod tests {
         let query = update("users").where_(("id", 1));
         let result = query.to_sql();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("UPDATE requires SET"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("UPDATE requires SET"));
     }
 }

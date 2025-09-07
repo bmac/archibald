@@ -26,23 +26,23 @@ impl Operator {
     pub const IS_NOT_NULL: Self = Operator::Known("IS NOT NULL");
     pub const EXISTS: Self = Operator::Known("EXISTS");
     pub const NOT_EXISTS: Self = Operator::Known("NOT EXISTS");
-    
+
     /// Create a custom operator for database-specific operations
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use archibald_core::Operator;
-    /// 
+    ///
     /// // PostgreSQL full-text search
     /// let fts_op = Operator::custom("@@");
-    /// 
+    ///
     /// // PostGIS distance operator
     /// let distance_op = Operator::custom("<->");
     /// ```
     pub const fn custom(op: &'static str) -> Self {
         Operator::Known(op)
     }
-    
+
     /// Get the string representation of the operator
     pub fn as_str(&self) -> &str {
         match self {
@@ -50,7 +50,7 @@ impl Operator {
             Operator::Unknown(op) => op,
         }
     }
-    
+
     /// Validate that this operator is recognized (used at to_sql() time)
     pub fn validate(&self) -> crate::Result<()> {
         match self {
@@ -111,7 +111,7 @@ impl IntoOperator for &str {
 /// Convenience module for operator constants
 pub mod op {
     use super::Operator;
-    
+
     pub const GT: Operator = Operator::GT;
     pub const LT: Operator = Operator::LT;
     pub const EQ: Operator = Operator::EQ;
@@ -131,7 +131,7 @@ pub mod op {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_operator_constants() {
         assert_eq!(Operator::GT.as_str(), ">");
@@ -139,19 +139,19 @@ mod tests {
         assert_eq!(Operator::EQ.as_str(), "=");
         assert_eq!(Operator::LIKE.as_str(), "LIKE");
     }
-    
+
     #[test]
     fn test_custom_operator() {
         let custom_op = Operator::custom("@@");
         assert_eq!(custom_op.as_str(), "@@");
     }
-    
+
     #[test]
     fn test_display() {
         assert_eq!(format!("{}", Operator::GT), ">");
         assert_eq!(format!("{}", Operator::LIKE), "LIKE");
     }
-    
+
     #[test]
     fn test_string_conversion() {
         assert_eq!(">".into_operator(), Operator::GT);
@@ -159,39 +159,39 @@ mod tests {
         assert_eq!("like".into_operator(), Operator::LIKE);
         assert_eq!(">=".into_operator(), Operator::GTE);
     }
-    
+
     #[test]
     fn test_invalid_string_conversion() {
         let invalid_op = "INVALID".into_operator();
         assert_eq!(invalid_op, Operator::Unknown("INVALID".to_string()));
-        
+
         // Test that validation fails
         assert!(invalid_op.validate().is_err());
     }
-    
+
     #[test]
     fn test_operator_equality() {
         assert_eq!(Operator::GT, ">".into_operator());
         assert_eq!(Operator::LIKE, "like".into_operator());
     }
-    
+
     #[test]
     fn test_null_operators() {
         assert_eq!("IS NULL".into_operator(), Operator::IS_NULL);
         assert_eq!("is null".into_operator(), Operator::IS_NULL);
         assert_eq!("IS NOT NULL".into_operator(), Operator::IS_NOT_NULL);
     }
-    
+
     #[test]
     fn test_deferred_validation_in_query() {
-        use crate::{from, builder::common::QueryBuilder};
-        
+        use crate::{builder::common::QueryBuilder, from};
+
         // Creating a query with invalid operator should not panic
         let query = from("users").select("*").where_(("age", "INVALID_OP", 18));
-        
+
         // But generating SQL should fail
         assert!(query.to_sql().is_err());
-        
+
         let err = query.to_sql().unwrap_err();
         assert!(err.to_string().contains("Unknown operator 'INVALID_OP'"));
     }

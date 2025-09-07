@@ -1,6 +1,6 @@
 //! Common types and traits shared across all query builders
 
-use crate::{Result, Operator, IntoOperator, Value};
+use crate::{IntoOperator, Operator, Result, Value};
 
 /// Core trait for all query builders
 pub trait QueryBuilder {
@@ -24,7 +24,7 @@ pub trait IntoCondition {
 // Implementation for shorthand equality: where(("age", 18))
 impl<T> IntoCondition for (&str, T)
 where
-    T: Into<Value>
+    T: Into<Value>,
 {
     fn into_condition(self) -> (String, Operator, Value) {
         (self.0.to_string(), Operator::EQ, self.1.into())
@@ -35,7 +35,7 @@ where
 impl<T, O> IntoCondition for (&str, O, T)
 where
     T: Into<Value>,
-    O: IntoOperator
+    O: IntoOperator,
 {
     fn into_condition(self) -> (String, Operator, Value) {
         (self.0.to_string(), self.1.into_operator(), self.2.into())
@@ -106,7 +106,7 @@ impl ColumnSelector {
     /// Create a COUNT(*) selector with alias
     pub fn count_as(alias: &str) -> Self {
         Self::CountAll {
-            alias: Some(alias.to_string())
+            alias: Some(alias.to_string()),
         }
     }
 
@@ -171,15 +171,20 @@ impl ColumnSelector {
                 // For regular columns, we can't add an alias directly to the enum variant
                 // This would require restructuring the enum or handling it differently
                 self
-            },
-            Self::Aggregate { alias: ref mut alias_field, .. } => {
+            }
+            Self::Aggregate {
+                alias: ref mut alias_field,
+                ..
+            } => {
                 *alias_field = Some(alias.to_string());
                 self
-            },
-            Self::CountAll { alias: ref mut alias_field } => {
+            }
+            Self::CountAll {
+                alias: ref mut alias_field,
+            } => {
                 *alias_field = Some(alias.to_string());
                 self
-            },
+            }
             // SubqueryColumn handled in select.rs
         }
     }
@@ -231,7 +236,12 @@ impl IntoColumns for (&str, &str, &str) {
 
 impl IntoColumns for (&str, &str, &str, &str) {
     fn into_columns(self) -> Vec<String> {
-        vec![self.0.to_string(), self.1.to_string(), self.2.to_string(), self.3.to_string()]
+        vec![
+            self.0.to_string(),
+            self.1.to_string(),
+            self.2.to_string(),
+            self.3.to_string(),
+        ]
     }
 }
 
@@ -350,13 +360,17 @@ impl IntoColumnSelectors for String {
 
 impl IntoColumnSelectors for Vec<String> {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
-        self.into_iter().map(|s| crate::ColumnSelector::Column(s)).collect()
+        self.into_iter()
+            .map(|s| crate::ColumnSelector::Column(s))
+            .collect()
     }
 }
 
 impl IntoColumnSelectors for Vec<&str> {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
-        self.into_iter().map(|s| crate::ColumnSelector::Column(s.to_string())).collect()
+        self.into_iter()
+            .map(|s| crate::ColumnSelector::Column(s.to_string()))
+            .collect()
     }
 }
 
@@ -418,10 +432,7 @@ impl IntoColumnSelectors for (&str, &str, &str, &str, &str) {
 // Support mixed tuples with ColumnSelectors
 impl IntoColumnSelectors for (&str, crate::ColumnSelector) {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
-        vec![
-            crate::ColumnSelector::Column(self.0.to_string()),
-            self.1,
-        ]
+        vec![crate::ColumnSelector::Column(self.0.to_string()), self.1]
     }
 }
 
@@ -481,7 +492,7 @@ mod tests {
         assert_eq!(value, 18.into());
     }
 
-    #[test] 
+    #[test]
     fn test_into_columns_implementations() {
         // Single string
         let cols = "name".into_columns();

@@ -34,7 +34,7 @@ impl Value {
     pub fn is_null(&self) -> bool {
         matches!(self, Value::Null)
     }
-    
+
     /// Get the SQL type name for this value
     pub fn type_name(&self) -> &'static str {
         match self {
@@ -147,7 +147,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_value_creation() {
         assert_eq!(Value::from(42i32), Value::I32(42));
@@ -155,7 +155,7 @@ mod tests {
         assert_eq!(Value::from("hello"), Value::String("hello".to_string()));
         assert_eq!(Value::from(()), Value::Null);
     }
-    
+
     #[test]
     fn test_array_conversion() {
         let arr = vec![1, 2, 3];
@@ -165,7 +165,7 @@ mod tests {
             Value::Array(vec![Value::I32(1), Value::I32(2), Value::I32(3)])
         );
     }
-    
+
     #[test]
     fn test_slice_conversion() {
         let arr: &[i32] = &[1, 2, 3];
@@ -175,19 +175,19 @@ mod tests {
             Value::Array(vec![Value::I32(1), Value::I32(2), Value::I32(3)])
         );
     }
-    
+
     #[test]
     fn test_option_conversion() {
         assert_eq!(Value::from(Some(42i32)), Value::I32(42));
         assert_eq!(Value::from(None::<i32>), Value::Null);
     }
-    
+
     #[test]
     fn test_is_null() {
         assert!(Value::Null.is_null());
         assert!(!Value::I32(42).is_null());
     }
-    
+
     #[test]
     fn test_type_names() {
         assert_eq!(Value::I32(42).type_name(), "INTEGER");

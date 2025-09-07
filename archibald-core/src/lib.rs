@@ -1,25 +1,31 @@
 //! Archibald Core - A type-safe SQL query builder inspired by knex.js
-//! 
-//! This crate provides the core functionality for building SQL queries in a 
+//!
+//! This crate provides the core functionality for building SQL queries in a
 //! fluent, immutable, and type-safe manner.
 
-pub mod error;
-pub mod operator;
 pub mod builder;
-pub mod value;
+pub mod error;
 pub mod executor;
+pub mod operator;
+pub mod value;
 
 // Re-export main types
-pub use error::{Error, Result};
-pub use operator::{Operator, IntoOperator, op};
-pub use builder::{InsertBuilderInitial, InsertBuilderComplete, UpdateBuilder, DeleteBuilderInitial, DeleteBuilderComplete};
-pub use builder::common::{QueryBuilder, IntoCondition, WhereCondition, WhereConnector, AggregateFunction, JoinType, SortDirection};
-pub use builder::select::{SelectBuilderInitial, SelectBuilderComplete, Subquery, ColumnSelector};
-pub use value::Value;
-pub use executor::{
-    ConnectionPool, ExecutableQuery, ExecutableModification, 
-    Transaction, TransactionalPool, IsolationLevel, transaction
+pub use builder::common::{
+    AggregateFunction, IntoCondition, JoinType, QueryBuilder, SortDirection, WhereCondition,
+    WhereConnector,
 };
+pub use builder::select::{ColumnSelector, SelectBuilderComplete, SelectBuilderInitial, Subquery};
+pub use builder::{
+    DeleteBuilderComplete, DeleteBuilderInitial, InsertBuilderComplete, InsertBuilderInitial,
+    UpdateBuilder,
+};
+pub use error::{Error, Result};
+pub use executor::{
+    transaction, ConnectionPool, ExecutableModification, ExecutableQuery, IsolationLevel,
+    Transaction, TransactionalPool,
+};
+pub use operator::{op, IntoOperator, Operator};
+pub use value::Value;
 
 /// Create a new SELECT query builder for the given table
 pub fn from(name: &str) -> SelectBuilderInitial {
