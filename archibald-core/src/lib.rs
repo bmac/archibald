@@ -19,7 +19,22 @@ pub use executor::{
     Transaction, TransactionalPool, IsolationLevel, transaction
 };
 
-/// Create a new query builder for the given table
+/// Create a new SELECT query builder for the given table
 pub fn from(name: &str) -> SelectBuilder {
     SelectBuilder::new(name)
+}
+
+/// Create a new UPDATE query builder for the given table
+pub fn update(name: &str) -> UpdateBuilder {
+    UpdateBuilder::new(name)
+}
+
+/// Create a new DELETE query builder for the given table
+pub fn delete(name: &str) -> DeleteBuilder {
+    DeleteBuilder::new(name)
+}
+
+/// Create a new INSERT query builder for the given table
+pub fn insert(name: &str) -> InsertBuilder {
+    InsertBuilder::new(name)
 }

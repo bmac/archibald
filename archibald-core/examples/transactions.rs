@@ -1,4 +1,4 @@
-use archibald_core::{from, op, InsertBuilder, UpdateBuilder};
+use archibald_core::{from, insert, update, op};
 use archibald_core::{ConnectionPool, ExecutableQuery, ExecutableModification, Transaction, TransactionalPool, IsolationLevel};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -174,7 +174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut debit_updates = HashMap::new();
     debit_updates.insert("balance".to_string(), "balance - 100".into()); // Note: In real use, you'd fetch current balance first
     
-    UpdateBuilder::new("accounts")
+    update("accounts")
         .set(debit_updates)
         .where_(("id", 1))
         .execute_tx(&mut txn)
@@ -187,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut credit_updates = HashMap::new();
     credit_updates.insert("balance".to_string(), "balance + 100".into());
     
-    let credit_result = UpdateBuilder::new("accounts")
+    let credit_result = update("accounts")
         .set(credit_updates)
         .where_(("id", 2))
         .execute_tx(&mut txn)
@@ -218,7 +218,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     
     // Update based on the read (classic read-modify-write)
-    UpdateBuilder::new("users")
+    update("users")
         .set({
             let mut updates = HashMap::new();
             updates.insert("vip_status".to_string(), true.into());
@@ -242,8 +242,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     user_data.insert("name".to_string(), "Complex User".into());
     user_data.insert("email".to_string(), "complex@example.com".into());
     
-    InsertBuilder::new("users")
-        .insert(user_data)
+    insert("users")
+        .values(user_data)
         .execute_tx(&mut complex_txn)
         .await?;
     
@@ -255,8 +255,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     account_data.insert("account_type".to_string(), "premium".into());
     account_data.insert("balance".to_string(), 5000.into());
     
-    InsertBuilder::new("accounts")
-        .insert(account_data)
+    insert("accounts")
+        .values(account_data)
         .execute_tx(&mut complex_txn)
         .await?;
     

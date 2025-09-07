@@ -1,4 +1,4 @@
-use archibald_core::{from, op, InsertBuilder, UpdateBuilder, DeleteBuilder, QueryBuilder};
+use archibald_core::{from, update, delete, insert, op, QueryBuilder};
 use archibald_core::{ColumnSelector, SortDirection};
 use std::collections::HashMap;
 
@@ -68,7 +68,7 @@ fn main() {
     user_data.insert("email".to_string(), "john@example.com".into());
     user_data.insert("age".to_string(), 30.into());
     
-    let insert_query = InsertBuilder::new("users").insert(user_data);
+    let insert_query = insert("users").values(user_data);
     println!("4. INSERT:");
     println!("   SQL: {}", insert_query.to_sql().unwrap());
     println!("   Parameters: {:?}\n", insert_query.parameters());
@@ -78,7 +78,7 @@ fn main() {
     updates.insert("email".to_string(), "newemail@example.com".into());
     updates.insert("last_login".to_string(), "2024-01-15".into());
     
-    let update_query = UpdateBuilder::new("users")
+    let update_query = update("users")
         .set(updates)
         .where_(("id", 123))
         .and_where(("active", true));  // Using and_where for clarity
@@ -88,7 +88,7 @@ fn main() {
     println!("   Parameters: {:?}\n", update_query.parameters());
     
     // DELETE
-    let delete_query = DeleteBuilder::new("users")
+    let delete_query = delete("users")
         .where_(("age", op::LT, 13))
         .or_where(("last_login", op::LT, "2020-01-01"));
         

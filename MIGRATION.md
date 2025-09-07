@@ -52,7 +52,7 @@ const users = await knex('users')
 
 **Archibald:**
 ```rust
-use archibald_core::{from, op};
+use archibald_core::{from, update, delete, op};
 
 let users: Vec<User> = from("users")
     .select(("id", "name", "email"))
@@ -256,13 +256,13 @@ const affected = await knex('users')
 
 **Archibald:**
 ```rust
-use archibald_core::UpdateBuilder;
+use archibald_core::update;
 
 let mut updates = HashMap::new();
 updates.insert("email".to_string(), "newemail@example.com".into());
 updates.insert("updated_at".to_string(), "NOW()".into());
 
-let affected = UpdateBuilder::new("users")
+let affected = update("users")
     .set(updates)
     .where_(("id", 123))
     .execute(&pool)
@@ -281,9 +281,9 @@ const affected = await knex('users')
 
 **Archibald:**
 ```rust
-use archibald_core::DeleteBuilder;
+use archibald_core::delete;
 
-let affected = DeleteBuilder::new("users")
+let affected = delete("users")
     .where_(("last_login", op::LT, "2020-01-01"))
     .or_where(("status", "inactive"))
     .execute(&pool)
@@ -366,7 +366,7 @@ let mut txn = pool.begin_transaction().await?;
 
 txn.savepoint("sp1").await?;
 
-UpdateBuilder::new("accounts")
+update("accounts")
     .set({
         let mut updates = HashMap::new();
         updates.insert("balance".to_string(), "balance - 100".into());
@@ -376,7 +376,7 @@ UpdateBuilder::new("accounts")
     .execute_tx(&mut txn)
     .await?;
 
-UpdateBuilder::new("accounts")
+update("accounts")
     .set({
         let mut updates = HashMap::new();
         updates.insert("balance".to_string(), "balance + 100".into());

@@ -1,4 +1,4 @@
-use archibald_core::{from, op, InsertBuilder, UpdateBuilder, DeleteBuilder};
+use archibald_core::{from, insert, update, delete, op};
 use archibald_core::{ConnectionPool, ExecutableQuery, ExecutableModification};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -128,8 +128,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     new_user_data.insert("email".to_string(), "david@example.com".into());
     new_user_data.insert("age".to_string(), 28.into());
     
-    let affected = InsertBuilder::new("users")
-        .insert(new_user_data)
+    let affected = insert("users")
+        .values(new_user_data)
         .execute(&pool)
         .await?;
     println!("Inserted {} row(s)", affected);
@@ -140,7 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     updates.insert("email".to_string(), "newemail@example.com".into());
     updates.insert("age".to_string(), 29.into());
     
-    let affected = UpdateBuilder::new("users")
+    let affected = update("users")
         .set(updates)
         .where_(("id", 1))
         .and_where(("name", "Alice"))
@@ -150,7 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // DELETE query
     println!("\n6. Delete inactive users:");
-    let affected = DeleteBuilder::new("users")
+    let affected = delete("users")
         .where_(("last_login", op::LT, "2020-01-01"))
         .or_where(("status", "inactive"))
         .execute(&pool)
@@ -213,8 +213,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let user_id = transaction(&pg_pool, |txn| async move {
         // Insert user
-        let user_id = InsertBuilder::new("users")
-            .insert(user_data)
+        let user_id = insert("users")
+            .values(user_data)
             .execute_tx(txn)
             .await? as i32;
         
@@ -223,8 +223,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         profile_data.insert("user_id".to_string(), user_id.into());
         profile_data.insert("bio".to_string(), "New user".into());
         
-        InsertBuilder::new("user_profiles")
-            .insert(profile_data)
+        insert("user_profiles")
+            .values(profile_data)
             .execute_tx(txn)
             .await?;
             

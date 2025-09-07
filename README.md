@@ -32,7 +32,7 @@ serde = { version = "1.0", features = ["derive"] }
 ## 📖 Basic Usage
 
 ```rust
-use archibald_core::{from, op, transaction};
+use archibald_core::{from, update, delete, insert, op, transaction};
 use archibald_core::executor::postgres::PostgresPool;
 use serde::{Deserialize, Serialize};
 
@@ -141,7 +141,7 @@ let mut updates = HashMap::new();
 updates.insert("email".to_string(), "newemail@example.com".into());
 updates.insert("last_login".to_string(), "2024-01-15".into());
 
-let affected = UpdateBuilder::new("users")
+let affected = update("users")
     .set(updates)
     .where_(("id", 123))
     .and_where(("active", true))
@@ -151,7 +151,7 @@ let affected = UpdateBuilder::new("users")
 
 ### DELETE
 ```rust
-let affected = DeleteBuilder::new("users")
+let affected = delete("users")
     .where_(("last_login", op::LT, "2020-01-01"))
     .or_where(("status", "inactive"))
     .execute(&pool)

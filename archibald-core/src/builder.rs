@@ -1245,20 +1245,20 @@ impl InsertBuilder {
         }
     }
     
-    /// Insert a single record
+    /// Add values for a single record
     /// 
     /// # Examples
     /// ```
-    /// use archibald_core::InsertBuilder;
+    /// use archibald_core::insert;
     /// use std::collections::HashMap;
     /// 
     /// let mut data = HashMap::new();
     /// data.insert("name".to_string(), "John".into());
     /// data.insert("age".to_string(), 30.into());
     /// 
-    /// let query = InsertBuilder::new("users").insert(data);
+    /// let query = insert("users").values(data);
     /// ```
-    pub fn insert<T>(mut self, data: T) -> Self
+    pub fn values<T>(mut self, data: T) -> Self
     where
         T: IntoInsertData,
     {
@@ -1268,8 +1268,8 @@ impl InsertBuilder {
         self
     }
     
-    /// Insert multiple records
-    pub fn insert_many<T>(mut self, data: Vec<T>) -> Self
+    /// Add values for multiple records
+    pub fn values_many<T>(mut self, data: Vec<T>) -> Self
     where
         T: IntoInsertData + Clone,
     {
@@ -1698,7 +1698,7 @@ mod tests {
         data.insert("name".to_string(), Value::String("John".to_string()));
         data.insert("age".to_string(), Value::I32(30));
         
-        let query = InsertBuilder::new("users").insert(data);
+        let query = InsertBuilder::new("users").values(data);
         let sql = query.to_sql().unwrap();
         
         // Note: HashMap iteration order is not guaranteed, so we just check structure
@@ -1719,7 +1719,7 @@ mod tests {
         data2.insert("name".to_string(), Value::String("Jane".to_string()));
         data2.insert("age".to_string(), Value::I32(25));
         
-        let query = InsertBuilder::new("users").insert_many(vec![data1, data2]);
+        let query = InsertBuilder::new("users").values_many(vec![data1, data2]);
         let sql = query.to_sql().unwrap();
         
         assert!(sql.starts_with("INSERT INTO users ("));
@@ -2641,5 +2641,29 @@ mod tests {
             ));
         let sql4 = query4.to_sql().unwrap();
         assert_eq!(sql4, "SELECT SUM(amount), AVG(amount), COUNT(*) FROM sales");
+    }
+    
+    #[test]
+    fn test_helper_functions() {
+        use crate::{from, update, delete};
+        
+        // Test from() helper 
+        let select_query = from("users").where_(("active", true));
+        let sql = select_query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users WHERE active = ?");
+        
+        // Test update() helper
+        let mut updates = std::collections::HashMap::new();
+        updates.insert("name".to_string(), crate::Value::String("John".to_string()));
+        let update_query = update("users")
+            .set(updates)
+            .where_(("id", 1));
+        let sql = update_query.to_sql().unwrap();
+        assert_eq!(sql, "UPDATE users SET name = ? WHERE id = ?");
+        
+        // Test delete() helper  
+        let delete_query = delete("users").where_(("inactive", true));
+        let sql = delete_query.to_sql().unwrap();
+        assert_eq!(sql, "DELETE FROM users WHERE inactive = ?");
     }
 }
