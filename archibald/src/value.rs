@@ -51,6 +51,14 @@ impl Value {
             Value::SubqueryPlaceholder => "SUBQUERY",
         }
     }
+
+    /// Extract array values if this is an Array variant
+    pub fn as_array(&self) -> Option<&Vec<Value>> {
+        match self {
+            Value::Array(arr) => Some(arr),
+            _ => None,
+        }
+    }
 }
 
 // Implement From for common types

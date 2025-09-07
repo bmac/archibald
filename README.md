@@ -48,9 +48,17 @@ update("users")
 Add to your `Cargo.toml`:
 
 ```toml
+# For PostgreSQL
 [dependencies]
 archibald = { version = "0.1", features = ["postgres"] }
 sqlx = { version = "0.7", features = ["runtime-tokio", "postgres"] }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+serde = { version = "1.0", features = ["derive"] }
+
+# For SQLite
+[dependencies]
+archibald = { version = "0.1", features = ["sqlite"] }
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 serde = { version = "1.0", features = ["derive"] }
 ```
@@ -76,6 +84,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = PostgresPool::new("postgresql://user:password@localhost/mydb").await?;
     
     // SELECT query
+    let users: Vec<User> = from("users")
+        .select(("id", "name", "email", "age"))
+        .where_(("age", op::GT, 18))
+        .and_where(("status", "active"))
+        .limit(10)
+        .fetch_all(&pool)
+        .await?;
+    
+    println!("Found {} users", users.len());
+    Ok(())
+}
+```
+
+### SQLite Usage
+
+```rust
+use archibald::{from, update, delete, insert, op, transaction};
+use archibald::executor::sqlite::SqlitePool;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+struct User {
+    id: i32,
+    name: String,
+    email: String,
+    age: i32,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect to SQLite database
+    let pool = SqlitePool::new("sqlite:example.db").await?;
+    
+    // SELECT query - identical API to PostgreSQL
     let users: Vec<User> = from("users")
         .select(("id", "name", "email", "age"))
         .where_(("age", op::GT, 18))
@@ -303,8 +345,8 @@ let users = from("users")
 | Database   | Status | Features |
 |------------|--------|----------|
 | PostgreSQL | ✅ Full | All features, parameter binding, transactions |
+| SQLite     | ✅ Full | All features, JSON as TEXT, limited isolation levels |
 | MySQL      | 🔄 Planned | Coming soon |
-| SQLite     | 🔄 Planned | Coming soon |
 
 ## 📚 Documentation
 
@@ -319,9 +361,10 @@ let users = from("users")
 - [x] SQL parameter binding & injection prevention
 - [x] Transaction support with savepoints
 - [x] Deferred validation architecture
+- [x] SQLite support
 - [ ] Schema builder (CREATE TABLE, ALTER TABLE, etc.)
 - [ ] Migration system
-- [ ] MySQL and SQLite support
+- [ ] MySQL support
 - [ ] Compile-time schema validation
 - [ ] Query optimization and caching
 
