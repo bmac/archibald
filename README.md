@@ -305,11 +305,7 @@ Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) 
 
 ## 📄 License
 
-Licensed under the MIT license
-
-* MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
+Licensed under the ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 ## 🙏 Acknowledgments
 
