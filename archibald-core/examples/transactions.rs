@@ -1,5 +1,5 @@
 use archibald_core::{from, op, InsertBuilder, UpdateBuilder};
-use archibald_core::{ConnectionPool, ExecutableQuery, ExecutableModification, Transaction, TransactionalPool, IsolationLevel, transaction};
+use archibald_core::{ConnectionPool, ExecutableQuery, ExecutableModification, Transaction, TransactionalPool, IsolationLevel};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

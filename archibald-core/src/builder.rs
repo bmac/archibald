@@ -612,15 +612,31 @@ impl SelectBuilder {
         self
     }
     
+    /// Add ORDER BY clause
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::{from, SortDirection};
+    /// 
+    /// let query = from("users").order_by("name", SortDirection::Asc);
+    /// ```
+    pub fn order_by(mut self, column: &str, direction: SortDirection) -> Self {
+        self.order_by_clauses.push(OrderByClause {
+            column: column.to_string(),
+            direction,
+        });
+        self
+    }
+
     /// Add ORDER BY clause with ascending sort
     /// 
     /// # Examples
     /// ```
     /// use archibald_core::from;
     /// 
-    /// let query = from("users").order_by("name");
+    /// let query = from("users").order_by_asc("created_at");
     /// ```
-    pub fn order_by(mut self, column: &str) -> Self {
+    pub fn order_by_asc(mut self, column: &str) -> Self {
         self.order_by_clauses.push(OrderByClause {
             column: column.to_string(),
             direction: SortDirection::Asc,
@@ -644,21 +660,6 @@ impl SelectBuilder {
         self
     }
     
-    /// Add ORDER BY clause with custom direction
-    /// 
-    /// # Examples
-    /// ```
-    /// use archibald_core::{from, SortDirection};
-    /// 
-    /// let query = from("users").order_by_with_direction("name", SortDirection::Desc);
-    /// ```
-    pub fn order_by_with_direction(mut self, column: &str, direction: SortDirection) -> Self {
-        self.order_by_clauses.push(OrderByClause {
-            column: column.to_string(),
-            direction,
-        });
-        self
-    }
     
     /// Add GROUP BY clause
     /// 
@@ -1082,6 +1083,97 @@ impl IntoColumnSelectors for (&str, &str, &str, &str) {
             ColumnSelector::Column(self.2.to_string()),
             ColumnSelector::Column(self.3.to_string())
         ]
+    }
+}
+
+// Mixed tuple implementations for IntoColumnSelectors
+impl IntoColumnSelectors for (&str, ColumnSelector) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            ColumnSelector::Column(self.0.to_string()),
+            self.1
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (ColumnSelector, &str) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            self.0,
+            ColumnSelector::Column(self.1.to_string())
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (ColumnSelector, ColumnSelector) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![self.0, self.1]
+    }
+}
+
+impl IntoColumnSelectors for (&str, ColumnSelector, ColumnSelector) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            ColumnSelector::Column(self.0.to_string()),
+            self.1,
+            self.2
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (ColumnSelector, &str, ColumnSelector) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            self.0,
+            ColumnSelector::Column(self.1.to_string()),
+            self.2
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (ColumnSelector, ColumnSelector, &str) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            self.0,
+            self.1,
+            ColumnSelector::Column(self.2.to_string())
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (&str, &str, ColumnSelector) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            ColumnSelector::Column(self.0.to_string()),
+            ColumnSelector::Column(self.1.to_string()),
+            self.2
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (&str, ColumnSelector, &str) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            ColumnSelector::Column(self.0.to_string()),
+            self.1,
+            ColumnSelector::Column(self.2.to_string())
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (ColumnSelector, &str, &str) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![
+            self.0,
+            ColumnSelector::Column(self.1.to_string()),
+            ColumnSelector::Column(self.2.to_string())
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (ColumnSelector, ColumnSelector, ColumnSelector) {
+    fn into_column_selectors(self) -> Vec<ColumnSelector> {
+        vec![self.0, self.1, self.2]
     }
 }
 
@@ -1833,7 +1925,7 @@ mod tests {
     #[test]
     fn test_order_by_asc() {
         let query = SelectBuilder::new("users")
-            .order_by("name");
+            .order_by_asc("name");
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC");
@@ -1851,7 +1943,7 @@ mod tests {
     #[test]
     fn test_order_by_with_direction() {
         let query = SelectBuilder::new("users")
-            .order_by_with_direction("age", SortDirection::Desc);
+            .order_by("age", SortDirection::Desc);
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY age DESC");
@@ -1860,9 +1952,9 @@ mod tests {
     #[test]
     fn test_multiple_order_by() {
         let query = SelectBuilder::new("users")
-            .order_by("name")
+            .order_by_asc("name")
             .order_by_desc("created_at")
-            .order_by("id");
+            .order_by_asc("id");
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC, created_at DESC, id ASC");
@@ -1903,7 +1995,7 @@ mod tests {
     fn test_order_by_with_where() {
         let query = SelectBuilder::new("users")
             .where_(("active", true))
-            .order_by("name");
+            .order_by_asc("name");
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users WHERE active = ? ORDER BY name ASC");
@@ -1914,7 +2006,7 @@ mod tests {
         let query = SelectBuilder::new("orders")
             .select("status")
             .group_by("status")
-            .order_by("status");
+            .order_by_asc("status");
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT status FROM orders GROUP BY status ORDER BY status ASC");
@@ -1927,7 +2019,7 @@ mod tests {
             .inner_join("orders", "users.id", "orders.user_id")
             .where_(("users.active", true))
             .group_by(("users.name", "orders.status"))
-            .order_by("users.name")
+            .order_by_asc("users.name")
             .order_by_desc("orders.status")
             .limit(10);
             
@@ -1938,7 +2030,7 @@ mod tests {
     #[test]
     fn test_order_by_with_limit_offset() {
         let query = SelectBuilder::new("users")
-            .order_by("created_at")
+            .order_by_asc("created_at")
             .limit(25)
             .offset(50);
             
@@ -1994,7 +2086,7 @@ mod tests {
         let query = SelectBuilder::new("users")
             .select("status")
             .distinct()
-            .order_by("status");
+            .order_by_asc("status");
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT status FROM users ORDER BY status ASC");
@@ -2031,8 +2123,8 @@ mod tests {
             .inner_join("roles", "user_roles.role_id", "roles.id")
             .where_(("users.active", true))
             .and_where(("roles.active", true))
-            .order_by("users.department")
-            .order_by("roles.name")
+            .order_by_asc("users.department")
+            .order_by_asc("roles.name")
             .limit(20);
             
         let sql = query.to_sql().unwrap();
@@ -2185,7 +2277,7 @@ mod tests {
             ])
             .where_(("status", "completed"))
             .group_by(("customer_id", "status"))
-            .order_by("customer_id")
+            .order_by_asc("customer_id")
             .order_by_desc("total_sales")
             .limit(100);
             
@@ -2311,7 +2403,7 @@ mod tests {
             ])
             .group_by("category")
             .having(("COUNT(*)", op::GT, 5))
-            .order_by("product_count")
+            .order_by_asc("product_count")
             .order_by_desc("max_price");
             
         let sql = query.to_sql().unwrap();
@@ -2337,8 +2429,8 @@ mod tests {
             .having(("COUNT(*)", op::GT, 10))
             .and_having(("SUM(amount)", op::GTE, 50000))
             .or_having(("AVG(amount)", op::GT, 1000))
-            .order_by("region")
-            .order_by("quarter")
+            .order_by_asc("region")
+            .order_by_asc("quarter")
             .order_by_desc("total_sales")
             .limit(20);
             
@@ -2508,5 +2600,46 @@ mod tests {
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT name FROM customers WHERE active = ? AND id IN (SELECT customer_id FROM orders WHERE status = ? AND total > ?)");
+    }
+    
+    #[test]
+    fn test_mixed_tuple_column_selectors() {
+        // Test all our new mixed tuple implementations
+        
+        // (&str, ColumnSelector)
+        let query1 = SelectBuilder::new("users")
+            .select(("name", ColumnSelector::count()));
+        let sql1 = query1.to_sql().unwrap();
+        assert_eq!(sql1, "SELECT name, COUNT(*) FROM users");
+        
+        // (&str, ColumnSelector, ColumnSelector) - the main one we wanted!
+        let query2 = SelectBuilder::new("users")
+            .select((
+                "name",
+                ColumnSelector::count().as_alias("total"),
+                ColumnSelector::avg("rating").as_alias("avg_rating")
+            ));
+        let sql2 = query2.to_sql().unwrap();
+        assert_eq!(sql2, "SELECT name, COUNT(*) AS total, AVG(rating) AS avg_rating FROM users");
+        
+        // (ColumnSelector, &str, ColumnSelector)
+        let query3 = SelectBuilder::new("products")
+            .select((
+                ColumnSelector::sum("price").as_alias("total_price"),
+                "category",
+                ColumnSelector::count()
+            ));
+        let sql3 = query3.to_sql().unwrap();
+        assert_eq!(sql3, "SELECT SUM(price) AS total_price, category, COUNT(*) FROM products");
+        
+        // (ColumnSelector, ColumnSelector, ColumnSelector)
+        let query4 = SelectBuilder::new("sales")
+            .select((
+                ColumnSelector::sum("amount"),
+                ColumnSelector::avg("amount"),
+                ColumnSelector::count()
+            ));
+        let sql4 = query4.to_sql().unwrap();
+        assert_eq!(sql4, "SELECT SUM(amount), AVG(amount), COUNT(*) FROM sales");
     }
 }
