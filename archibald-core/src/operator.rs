@@ -184,7 +184,7 @@ mod tests {
     
     #[test]
     fn test_deferred_validation_in_query() {
-        use crate::{from, builder::QueryBuilder};
+        use crate::{from, builder::common::QueryBuilder};
         
         // Creating a query with invalid operator should not panic
         let query = from("users").select("*").where_(("age", "INVALID_OP", 18));

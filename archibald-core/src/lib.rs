@@ -12,7 +12,9 @@ pub mod executor;
 // Re-export main types
 pub use error::{Error, Result};
 pub use operator::{Operator, IntoOperator, op};
-pub use builder::{QueryBuilder, SelectBuilderInitial, SelectBuilderComplete, InsertBuilderInitial, InsertBuilderComplete, UpdateBuilder, DeleteBuilderInitial, DeleteBuilderComplete, JoinType, SortDirection, ColumnSelector, AggregateFunction, Subquery};
+pub use builder::{InsertBuilderInitial, InsertBuilderComplete, UpdateBuilder, DeleteBuilderInitial, DeleteBuilderComplete};
+pub use builder::common::{QueryBuilder, IntoCondition, WhereCondition, WhereConnector, AggregateFunction, JoinType, SortDirection};
+pub use builder::select::{SelectBuilderInitial, SelectBuilderComplete, Subquery, ColumnSelector};
 pub use value::Value;
 pub use executor::{
     ConnectionPool, ExecutableQuery, ExecutableModification, 
@@ -21,20 +23,20 @@ pub use executor::{
 
 /// Create a new SELECT query builder for the given table
 pub fn from(name: &str) -> SelectBuilderInitial {
-    SelectBuilderInitial::new(name)
+    builder::select::SelectBuilderInitial::new(name)
 }
 
 /// Create a new UPDATE query builder for the given table
 pub fn update(name: &str) -> UpdateBuilder {
-    UpdateBuilder::new(name)
+    builder::UpdateBuilder::new(name)
 }
 
 /// Create a new DELETE query builder for the given table
 pub fn delete(name: &str) -> DeleteBuilderInitial {
-    DeleteBuilderInitial::new(name)
+    builder::DeleteBuilderInitial::new(name)
 }
 
 /// Create a new INSERT query builder for the given table
 pub fn insert(name: &str) -> InsertBuilderInitial {
-    InsertBuilderInitial::new(name)
+    builder::InsertBuilderInitial::new(name)
 }

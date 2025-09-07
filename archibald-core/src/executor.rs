@@ -1,6 +1,7 @@
 //! Query execution and connection pool interface
 
-use crate::{QueryBuilder, Result, Value};
+use crate::{Result, Value};
+use crate::builder::common::QueryBuilder;
 use serde::de::DeserializeOwned;
 use std::future::Future;
 
@@ -215,7 +216,7 @@ pub trait ExecutableModification: QueryBuilder {
 }
 
 // Implementation for SelectBuilder
-impl<T> ExecutableQuery<T> for crate::SelectBuilderComplete
+impl<T> ExecutableQuery<T> for crate::builder::select::SelectBuilderComplete
 where
     T: DeserializeOwned + Send + Unpin,
 {
@@ -275,7 +276,7 @@ where
 }
 
 // Implementation for InsertBuilder
-impl ExecutableModification for crate::InsertBuilderComplete {
+impl ExecutableModification for crate::builder::InsertBuilderComplete {
     async fn execute<P>(self, pool: &P) -> Result<u64>
     where
         P: ConnectionPool,
@@ -296,7 +297,7 @@ impl ExecutableModification for crate::InsertBuilderComplete {
 }
 
 // Implementation for UpdateBuilder  
-impl ExecutableModification for crate::UpdateBuilder {
+impl ExecutableModification for crate::builder::UpdateBuilder {
     async fn execute<P>(self, pool: &P) -> Result<u64>
     where
         P: ConnectionPool,
@@ -317,7 +318,7 @@ impl ExecutableModification for crate::UpdateBuilder {
 }
 
 // Implementation for DeleteBuilder
-impl ExecutableModification for crate::DeleteBuilderComplete {
+impl ExecutableModification for crate::builder::DeleteBuilderComplete {
     async fn execute<P>(self, pool: &P) -> Result<u64>
     where
         P: ConnectionPool,
@@ -645,7 +646,8 @@ pub mod postgres {
         #[test]
         fn test_query_with_parameters_integration() {
             // Test that our query builder properly passes parameters to the executor
-            use crate::{from, builder::QueryBuilder, op};
+            use crate::{from, op};
+            use crate::builder::common::QueryBuilder;
             
             // Build a query with parameters
             let query = from("users")
@@ -1016,7 +1018,7 @@ mod tests {
         let mut updates = HashMap::new();
         updates.insert("name".to_string(), crate::Value::String("Updated".to_string()));
         
-        let query = crate::UpdateBuilder::new("users")
+        let query = crate::builder::UpdateBuilder::new("users")
             .set(updates)
             .where_(("id", 1));
             
