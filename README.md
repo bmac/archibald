@@ -4,7 +4,6 @@ A type-safe, async SQL query builder for Rust, inspired by knex.js.
 
 [![Crates.io](https://img.shields.io/crates/v/archibald-core.svg)](https://crates.io/crates/archibald-core)
 [![Documentation](https://docs.rs/archibald-core/badge.svg)](https://docs.rs/archibald-core)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 
 ## ✨ Features
 
@@ -54,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let users: Vec<User> = from("users")
         .select(("id", "name", "email", "age"))
         .where_(("age", op::GT, 18))
-        .where_(("status", "active"))
+        .and_where(("status", "active"))
         .limit(10)
         .fetch_all(&pool)
         .await?;
@@ -71,8 +70,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 let adults = from("users")
     .select(("id", "name", "email"))
     .where_(("age", op::GTE, 18))           // age >= 18
-    .where_(("status", "active"))           // status = 'active' (defaults to EQ)
-    .where_(("name", "LIKE", "%john%"))     // name LIKE '%john%'
+    .and_where(("status", "active"))           // status = 'active' (defaults to EQ)
+    .and_where(("name", "LIKE", "%john%"))     // name LIKE '%john%'
     .fetch_all(&pool)
     .await?;
 ```
@@ -145,7 +144,7 @@ updates.insert("last_login".to_string(), "2024-01-15".into());
 let affected = UpdateBuilder::new("users")
     .set(updates)
     .where_(("id", 123))
-    .where_(("active", true))
+    .and_where(("active", true))
     .execute(&pool)
     .await?;
 ```
@@ -244,7 +243,7 @@ let nearby = from("locations")
 // Build queries without Result handling
 let query = from("users")
     .where_(("age", "INVALID_OPERATOR", 18))  // Stored, not validated yet
-    .where_(("name", "John"));
+    .and_where(("name", "John"));
 
 // Validation happens at SQL generation
 match query.to_sql() {
@@ -265,7 +264,7 @@ Archibald prevents SQL injection through:
 // ✅ Safe - parameters are automatically bound
 let users = from("users")
     .where_(("name", user_input))        // Automatically parameterized as $1
-    .where_(("age", op::GT, min_age))    // Automatically parameterized as $2
+    .and_where(("age", op::GT, min_age))    // Automatically parameterized as $2
     .fetch_all(&pool)
     .await?;
 
@@ -306,9 +305,8 @@ Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) 
 
 ## 📄 License
 
-Licensed under either of
+Licensed under the MIT license
 
-* Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
