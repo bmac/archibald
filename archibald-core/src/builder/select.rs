@@ -407,6 +407,77 @@ impl SelectBuilderInitial {
         self.parameters.push(value);
         self
     }
+
+    /// Add an AND HAVING condition (requires GROUP BY)
+    pub fn and_having<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        self.having_conditions.push(HavingCondition {
+            column_or_function: column,
+            operator,
+            value: value.clone(),
+            connector: WhereConnector::And,
+        });
+        self.parameters.push(value);
+        self
+    }
+
+    /// Add an OR HAVING condition (requires GROUP BY)
+    pub fn or_having<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        self.having_conditions.push(HavingCondition {
+            column_or_function: column,
+            operator,
+            value: value.clone(),
+            connector: WhereConnector::Or,
+        });
+        self.parameters.push(value);
+        self
+    }
+
+    /// Add an ORDER BY clause
+    pub fn order_by(mut self, column: &str, direction: SortDirection) -> Self {
+        self.order_by_clauses.push(OrderByClause {
+            column: column.to_string(),
+            direction,
+        });
+        self
+    }
+
+    /// Add an ORDER BY ASC clause (convenience method)
+    pub fn order_by_asc(mut self, column: &str) -> Self {
+        self.order_by_clauses.push(OrderByClause {
+            column: column.to_string(),
+            direction: SortDirection::Asc,
+        });
+        self
+    }
+
+    /// Add an ORDER BY DESC clause (convenience method)
+    pub fn order_by_desc(mut self, column: &str) -> Self {
+        self.order_by_clauses.push(OrderByClause {
+            column: column.to_string(),
+            direction: SortDirection::Desc,
+        });
+        self
+    }
+
+    /// Add a LIMIT clause
+    pub fn limit(mut self, count: u64) -> Self {
+        self.limit_value = Some(count);
+        self
+    }
+
+    /// Add an OFFSET clause
+    pub fn offset(mut self, offset: u64) -> Self {
+        self.offset_value = Some(offset);
+        self
+    }
 }
 
 impl SelectBuilderComplete {
@@ -607,6 +678,38 @@ impl SelectBuilderComplete {
             operator,
             value: value.clone(),
             connector: WhereConnector::And,
+        });
+        self.parameters.push(value);
+        self
+    }
+
+    /// Add an AND HAVING condition (requires GROUP BY)
+    pub fn and_having<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        self.having_conditions.push(HavingCondition {
+            column_or_function: column,
+            operator,
+            value: value.clone(),
+            connector: WhereConnector::And,
+        });
+        self.parameters.push(value);
+        self
+    }
+
+    /// Add an OR HAVING condition (requires GROUP BY)
+    pub fn or_having<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        self.having_conditions.push(HavingCondition {
+            column_or_function: column,
+            operator,
+            value: value.clone(),
+            connector: WhereConnector::Or,
         });
         self.parameters.push(value);
         self
@@ -1332,10 +1435,11 @@ mod tests {
                 ColumnSelector::avg("price").as_alias("avg_price")
             ])
             .group_by("category")
-            .having(("COUNT(*)", op::GT, 10));
+            .having(("COUNT(*)", op::GT, 10))
+            .or_having(("AVG(price)", op::LT, 50));
             
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT category, COUNT(*) AS product_count, AVG(price) AS avg_price FROM products GROUP BY category HAVING COUNT(*) > ?");
+        assert_eq!(sql, "SELECT category, COUNT(*) AS product_count, AVG(price) AS avg_price FROM products GROUP BY category HAVING COUNT(*) > ? OR AVG(price) < ?");
     }
 
     #[test]
@@ -1396,10 +1500,10 @@ mod tests {
     #[test]
     fn test_multiple_order_by() {
         let query = from("users")
-            .select("*")
             .order_by_asc("name")
             .order_by_desc("created_at")
-            .order_by_asc("id");
+            .order_by_asc("id")
+            .select("*");
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC, created_at DESC, id ASC");
@@ -1408,10 +1512,10 @@ mod tests {
     #[test]
     fn test_order_by_with_limit_offset() {
         let query = from("users")
-            .select("*")
             .order_by_asc("created_at")
             .limit(25)
-            .offset(50);
+            .offset(50)
+            .select("*");
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users ORDER BY created_at ASC LIMIT 25 OFFSET 50");
@@ -1421,8 +1525,8 @@ mod tests {
     fn test_order_by_with_where() {
         let query = from("users")
             .where_(("active", true))
-            .select("*")
-            .order_by_asc("name");
+            .order_by_asc("name")
+            .select("*");
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users WHERE active = ? ORDER BY name ASC");
@@ -1478,9 +1582,10 @@ mod tests {
                 ColumnSelector::sum("total").as_alias("total_spent")
             ])
             .group_by("customer_id")
-            .having(("COUNT(*)", op::GT, 3));
+            .having(("COUNT(*)", op::GT, 3))
+            .and_having(("SUM(total)", op::GTE, 500));
             
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT customer_id, COUNT(*) AS order_count, SUM(total) AS total_spent FROM orders GROUP BY customer_id HAVING COUNT(*) > ?");
+        assert_eq!(sql, "SELECT customer_id, COUNT(*) AS order_count, SUM(total) AS total_spent FROM orders GROUP BY customer_id HAVING COUNT(*) > ? AND SUM(total) >= ?");
     }
 }
