@@ -416,11 +416,30 @@ impl IntoColumnSelectors for (&str, &str, &str, &str, &str) {
 }
 
 // Support mixed tuples with ColumnSelectors
+impl IntoColumnSelectors for (&str, crate::ColumnSelector) {
+    fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
+        vec![
+            crate::ColumnSelector::Column(self.0.to_string()),
+            self.1,
+        ]
+    }
+}
+
 impl IntoColumnSelectors for (&str, crate::ColumnSelector, crate::ColumnSelector) {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
         vec![
             crate::ColumnSelector::Column(self.0.to_string()),
             self.1,
+            self.2,
+        ]
+    }
+}
+
+impl IntoColumnSelectors for (crate::ColumnSelector, &str, crate::ColumnSelector) {
+    fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
+        vec![
+            self.0,
+            crate::ColumnSelector::Column(self.1.to_string()),
             self.2,
         ]
     }

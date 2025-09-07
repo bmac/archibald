@@ -1,6 +1,6 @@
 //! SELECT query builder implementation
 
-use crate::{Result, Error, Value};
+use crate::{Result, Error, Value, IntoOperator};
 use super::common::{
     QueryBuilder, IntoCondition, WhereCondition, WhereConnector, 
     AggregateFunction, IntoColumns, IntoColumnSelectors, JoinType, JoinConnector, JoinClause,
@@ -112,6 +112,14 @@ impl ColumnSelector {
                 *alias_field = Some(alias.to_string());
                 self
             },
+        }
+    }
+
+    /// Create a subquery column selector with alias
+    pub fn subquery_as(query: SelectBuilderComplete, alias: &str) -> Self {
+        Self::SubqueryColumn {
+            subquery: Subquery::new(query),
+            alias: Some(alias.to_string()),
         }
     }
 }
@@ -311,6 +319,28 @@ impl SelectBuilderInitial {
         self
     }
 
+    /// Add a WHERE NOT IN condition with a subquery
+    pub fn where_not_in(mut self, column: &str, subquery: SelectBuilderComplete) -> Self {
+        self.subquery_conditions.push(SubqueryCondition {
+            column: column.to_string(),
+            operator: crate::Operator::NOT_IN,
+            subquery: Subquery::new(subquery),
+            connector: WhereConnector::And,
+        });
+        self
+    }
+
+    /// Add a WHERE NOT EXISTS condition with a subquery
+    pub fn where_not_exists(mut self, subquery: SelectBuilderComplete) -> Self {
+        self.subquery_conditions.push(SubqueryCondition {
+            column: "".to_string(), // NOT EXISTS doesn't need a column
+            operator: crate::Operator::NOT_EXISTS,
+            subquery: Subquery::new(subquery),
+            connector: WhereConnector::And,
+        });
+        self
+    }
+
     /// Add an INNER JOIN clause
     pub fn inner_join(mut self, table: &str, left_column: &str, right_column: &str) -> Self {
         self.join_clauses.push(JoinClause {
@@ -377,6 +407,24 @@ impl SelectBuilderInitial {
             join_type: JoinType::Cross,
             table: table.to_string(),
             on_conditions: Vec::new(), // CROSS JOIN has no ON conditions
+        });
+        self
+    }
+
+    /// Generic JOIN method with custom join type and operator
+    pub fn join<O>(mut self, join_type: JoinType, table: &str, left_col: &str, operator: O, right_col: &str) -> Self
+    where
+        O: IntoOperator,
+    {
+        self.join_clauses.push(JoinClause {
+            join_type,
+            table: table.to_string(),
+            on_conditions: vec![super::common::JoinCondition {
+                left_column: left_col.to_string(),
+                operator: operator.into_operator(),
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
         });
         self
     }
@@ -586,6 +634,30 @@ impl SelectBuilderComplete {
         self
     }
 
+    /// Add a WHERE NOT IN condition with a subquery
+    pub fn where_not_in(mut self, column: &str, subquery: SelectBuilderComplete) -> Self {
+        self.subquery_conditions.push(SubqueryCondition {
+            column: column.to_string(),
+            operator: crate::Operator::NOT_IN,
+            subquery: Subquery::new(subquery),
+            connector: WhereConnector::And,
+        });
+        // Parameters from subqueries are handled inside the Subquery struct
+        self
+    }
+
+    /// Add a WHERE NOT EXISTS condition with a subquery
+    pub fn where_not_exists(mut self, subquery: SelectBuilderComplete) -> Self {
+        self.subquery_conditions.push(SubqueryCondition {
+            column: "".to_string(), // NOT EXISTS doesn't need a column
+            operator: crate::Operator::NOT_EXISTS,
+            subquery: Subquery::new(subquery),
+            connector: WhereConnector::And,
+        });
+        // Parameters from subqueries are handled inside the Subquery struct
+        self
+    }
+
     /// Add an INNER JOIN clause
     pub fn inner_join(mut self, table: &str, left_column: &str, right_column: &str) -> Self {
         self.join_clauses.push(JoinClause {
@@ -652,6 +724,24 @@ impl SelectBuilderComplete {
             join_type: JoinType::Cross,
             table: table.to_string(),
             on_conditions: Vec::new(), // CROSS JOIN has no ON conditions
+        });
+        self
+    }
+
+    /// Generic JOIN method with custom join type and operator
+    pub fn join<O>(mut self, join_type: JoinType, table: &str, left_col: &str, operator: O, right_col: &str) -> Self
+    where
+        O: IntoOperator,
+    {
+        self.join_clauses.push(JoinClause {
+            join_type,
+            table: table.to_string(),
+            on_conditions: vec![super::common::JoinCondition {
+                left_column: left_col.to_string(),
+                operator: operator.into_operator(),
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
         });
         self
     }
@@ -1587,5 +1677,210 @@ mod tests {
             
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT customer_id, COUNT(*) AS order_count, SUM(total) AS total_spent FROM orders GROUP BY customer_id HAVING COUNT(*) > ? AND SUM(total) >= ?");
+    }
+
+    #[test]
+    fn test_generic_join_method() {
+        let query = from("users")
+            .join(JoinType::Inner, "profiles", "users.id", crate::Operator::EQ, "profiles.user_id")
+            .select("*");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id");
+    }
+
+    #[test]
+    fn test_join_with_custom_operator() {
+        let query = from("users")
+            .join(JoinType::Inner, "profiles", "users.id", op::GT, "profiles.min_user_id")
+            .select("*");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id > profiles.min_user_id");
+    }
+
+    #[test]
+    fn test_complex_subquery_with_joins() {
+        let subquery = from("orders")
+            .inner_join("order_items", "orders.id", "order_items.order_id")
+            .select(ColumnSelector::sum("order_items.quantity"))
+            .where_(("orders.customer_id", 1))
+            .group_by("orders.customer_id");
+
+        let query = from("customers")
+            .select(vec![
+                ColumnSelector::Column("name".to_string()),
+                ColumnSelector::subquery_as(subquery, "total_items_ordered")
+            ]);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT name, (SELECT SUM(order_items.quantity) FROM orders INNER JOIN order_items ON orders.id = order_items.order_id WHERE orders.customer_id = ? GROUP BY orders.customer_id) AS total_items_ordered FROM customers");
+    }
+
+    #[test]
+    fn test_where_in_subquery() {
+        let subquery = from("orders")
+            .select("customer_id")
+            .where_(("status", "completed"));
+
+        let query = from("customers")
+            .where_in("id", subquery)
+            .select("*");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE status = ?)");
+    }
+
+    #[test]
+    fn test_subquery_in_select() {
+        let subquery = from("orders")
+            .select("total")
+            .where_(("customer_id", 1))
+            .limit(1);
+
+        let query = from("customers")
+            .select(vec![
+                ColumnSelector::Column("name".to_string()),
+                ColumnSelector::subquery_as(subquery, "latest_order_total")
+            ]);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT name, (SELECT total FROM orders WHERE customer_id = ? LIMIT 1) AS latest_order_total FROM customers");
+    }
+
+    #[test]
+    fn test_where_exists_subquery() {
+        let subquery = from("orders")
+            .select("1")
+            .where_(("orders.customer_id", 1));
+
+        let query = from("customers")
+            .where_exists(subquery)
+            .select("*");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE  EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ?)");
+    }
+
+    #[test]
+    fn test_where_not_in_subquery() {
+        let subquery = from("cancelled_orders")
+            .select("customer_id");
+
+        let query = from("customers")
+            .where_not_in("id", subquery)
+            .select("*");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE id NOT IN (SELECT customer_id FROM cancelled_orders)");
+    }
+
+    #[test]
+    fn test_where_not_exists_subquery() {
+        let subquery = from("orders")
+            .select("1")
+            .where_(("orders.customer_id", 1));
+
+        let query = from("customers")
+            .where_not_exists(subquery)
+            .select("*");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE  NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ?)");
+    }
+
+    #[test]
+    fn test_subquery_with_aggregation() {
+        let avg_subquery = from("orders")
+            .select(ColumnSelector::avg("total").as_alias("avg_total"));
+
+        let query = from("customers")
+            .select(vec![
+                ColumnSelector::Column("name".to_string()),
+                ColumnSelector::subquery_as(avg_subquery, "avg_order_total")
+            ]);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT name, (SELECT AVG(total) AS avg_total FROM orders) AS avg_order_total FROM customers");
+    }
+
+    #[test]
+    fn test_subquery_with_multiple_conditions() {
+        let subquery = from("orders")
+            .select("customer_id")
+            .where_(("status", "completed"))
+            .and_where(("total", op::GT, 50));
+
+        let query = from("customers")
+            .select("name")
+            .where_in("id", subquery)
+            .where_(("active", true));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT name FROM customers WHERE active = ? AND id IN (SELECT customer_id FROM orders WHERE status = ? AND total > ?)");
+    }
+
+    #[test]
+    fn test_nested_subqueries() {
+        let inner_subquery = from("order_items")
+            .select("order_id")
+            .where_(("product_id", 1));
+
+        let outer_subquery = from("orders")
+            .select("customer_id")
+            .where_in("id", inner_subquery);
+
+        let query = from("customers")
+            .select("*")
+            .where_in("id", outer_subquery);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE id IN (SELECT order_id FROM order_items WHERE product_id = ?))");
+    }
+
+    #[test]
+    fn test_mixed_tuple_column_selectors() {
+        // Test all our new mixed tuple implementations
+
+        // (&str, ColumnSelector)
+        let query1 = from("users")
+            .select(("name", ColumnSelector::count()));
+        let sql1 = query1.to_sql().unwrap();
+        assert_eq!(sql1, "SELECT name, COUNT(*) FROM users");
+
+        // (&str, ColumnSelector, ColumnSelector) - the main one we wanted!
+        let query2 = from("users")
+            .select((
+                "name",
+                ColumnSelector::count().as_alias("total"),
+                ColumnSelector::avg("rating").as_alias("avg_rating")
+            ));
+        let sql2 = query2.to_sql().unwrap();
+        assert_eq!(sql2, "SELECT name, COUNT(*) AS total, AVG(rating) AS avg_rating FROM users");
+
+        // (ColumnSelector, &str, ColumnSelector)
+        let query3 = from("products")
+            .select((
+                ColumnSelector::sum("price").as_alias("total_price"),
+                "category",
+                ColumnSelector::count()
+            ));
+        let sql3 = query3.to_sql().unwrap();
+        assert_eq!(sql3, "SELECT SUM(price) AS total_price, category, COUNT(*) FROM products");
+    }
+
+    #[test]
+    fn test_mixed_where_and_subquery_conditions() {
+        let subquery = from("orders")
+            .select("customer_id")
+            .where_(("total", op::GT, 100));
+
+        let query = from("customers")
+            .select("*")
+            .where_(("active", true))
+            .where_in("id", subquery);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM customers WHERE active = ? AND id IN (SELECT customer_id FROM orders WHERE total > ?)");
     }
 }
