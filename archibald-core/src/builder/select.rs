@@ -213,6 +213,13 @@ impl SelectBuilderInitial {
     }
 
     /// Select specific columns, transitioning to SelectBuilderComplete
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::from;
+    ///
+    /// let query = from("users").select(("id", "name", "email"));
+    /// ```
     pub fn select<T>(self, columns: T) -> SelectBuilderComplete
     where
         T: IntoColumnSelectors,
@@ -254,6 +261,15 @@ impl SelectBuilderInitial {
     }
 
     /// Add a WHERE condition
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::{from, op};
+    ///
+    /// let query = from("users")
+    ///     .where_(("age", op::GT, 18))
+    ///     .where_(("name", "John"));
+    /// ```
     pub fn where_<C>(mut self, condition: C) -> Self
     where
         C: IntoCondition,
@@ -298,6 +314,14 @@ impl SelectBuilderInitial {
     }
 
     /// Add a WHERE IN condition with a subquery
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::from;
+    ///
+    /// let subquery = from("orders").select("customer_id").where_(("status", "active"));
+    /// let query = from("customers").where_in("id", subquery);
+    /// ```
     pub fn where_in(mut self, column: &str, subquery: SelectBuilderComplete) -> Self {
         self.subquery_conditions.push(SubqueryCondition {
             column: column.to_string(),
@@ -342,6 +366,14 @@ impl SelectBuilderInitial {
     }
 
     /// Add an INNER JOIN clause
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::from;
+    ///
+    /// let query = from("users")
+    ///     .inner_join("posts", "users.id", "posts.user_id");
+    /// ```
     pub fn inner_join(mut self, table: &str, left_column: &str, right_column: &str) -> Self {
         self.join_clauses.push(JoinClause {
             join_type: JoinType::Inner,
@@ -412,6 +444,14 @@ impl SelectBuilderInitial {
     }
 
     /// Generic JOIN method with custom join type and operator
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::{from, JoinType, op};
+    ///
+    /// let query = from("users")
+    ///     .join(JoinType::Left, "profiles", "users.id", op::EQ, "profiles.user_id");
+    /// ```
     pub fn join<O>(mut self, join_type: JoinType, table: &str, left_col: &str, operator: O, right_col: &str) -> Self
     where
         O: IntoOperator,
@@ -430,6 +470,13 @@ impl SelectBuilderInitial {
     }
 
     /// Add a GROUP BY clause
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::from;
+    ///
+    /// let query = from("orders").group_by(("customer_id", "status"));
+    /// ```
     pub fn group_by<C>(mut self, columns: C) -> Self
     where
         C: IntoColumns,
@@ -441,6 +488,19 @@ impl SelectBuilderInitial {
     }
 
     /// Add a HAVING condition (requires GROUP BY)
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::{from, ColumnSelector, op};
+    ///
+    /// let query = from("orders")
+    ///     .select(vec![
+    ///         ColumnSelector::Column("status".to_string()),
+    ///         ColumnSelector::count().as_alias("count")
+    ///     ])
+    ///     .group_by("status")
+    ///     .having(("COUNT(*)", op::GT, 5));
+    /// ```
     pub fn having<C>(mut self, condition: C) -> Self
     where
         C: IntoCondition,
@@ -489,6 +549,13 @@ impl SelectBuilderInitial {
     }
 
     /// Add an ORDER BY clause
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::{from, SortDirection};
+    ///
+    /// let query = from("users").order_by("name", SortDirection::Asc);
+    /// ```
     pub fn order_by(mut self, column: &str, direction: SortDirection) -> Self {
         self.order_by_clauses.push(OrderByClause {
             column: column.to_string(),
@@ -498,6 +565,13 @@ impl SelectBuilderInitial {
     }
 
     /// Add an ORDER BY ASC clause (convenience method)
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::from;
+    ///
+    /// let query = from("users").order_by_asc("created_at");
+    /// ```
     pub fn order_by_asc(mut self, column: &str) -> Self {
         self.order_by_clauses.push(OrderByClause {
             column: column.to_string(),
@@ -507,6 +581,13 @@ impl SelectBuilderInitial {
     }
 
     /// Add an ORDER BY DESC clause (convenience method)
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::from;
+    ///
+    /// let query = from("users").order_by_desc("created_at");
+    /// ```
     pub fn order_by_desc(mut self, column: &str) -> Self {
         self.order_by_clauses.push(OrderByClause {
             column: column.to_string(),
@@ -605,6 +686,13 @@ impl SelectBuilderComplete {
     }
 
     /// Mark the query as DISTINCT
+    ///
+    /// # Examples
+    /// ```
+    /// use archibald_core::from;
+    ///
+    /// let query = from("users").select("status").distinct();
+    /// ```
     pub fn distinct(mut self) -> Self {
         self.distinct = true;
         self
