@@ -1,6 +1,6 @@
 //! Query builder traits and implementations
 
-use crate::{Result, Operator, IntoOperator, Value};
+use crate::{Result, Error, Operator, IntoOperator, Value};
 
 /// Core trait for all query builders
 pub trait QueryBuilder {
@@ -927,6 +927,21 @@ impl SelectBuilderComplete {
         self
     }
 
+    /// Add LEFT JOIN clause
+    pub fn left_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Left,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: Operator::EQ,
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+
     /// Add GROUP BY clause
     pub fn group_by<C>(mut self, columns: C) -> Self
     where
@@ -987,6 +1002,114 @@ impl SelectBuilderComplete {
             connector: WhereConnector::And,
         });
         self
+    }
+
+    /// Set DISTINCT flag
+    pub fn distinct(mut self) -> Self {
+        self.distinct = true;
+        self
+    }
+
+    /// Add a CROSS JOIN clause
+    pub fn cross_join(mut self, table: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Cross,
+            table: table.to_string(),
+            on_conditions: Vec::new(), // CROSS JOIN has no ON conditions
+        });
+        self
+    }
+
+    /// Add ORDER BY ASC clause (convenience method)
+    pub fn order_by_asc(mut self, column: &str) -> Self {
+        self.order_by_clauses.push(OrderByClause {
+            column: column.to_string(),
+            direction: SortDirection::Asc,
+        });
+        self
+    }
+
+    /// Add ORDER BY DESC clause (convenience method)
+    pub fn order_by_desc(mut self, column: &str) -> Self {
+        self.order_by_clauses.push(OrderByClause {
+            column: column.to_string(),
+            direction: SortDirection::Desc,
+        });
+        self
+    }
+
+    /// Add an OR HAVING condition
+    pub fn or_having<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        self.having_conditions.push(HavingCondition {
+            column_or_function: column,
+            operator,
+            value,
+            connector: WhereConnector::Or,
+        });
+        self.parameters.push(self.having_conditions.last().unwrap().value.clone());
+        self
+    }
+
+    /// Add an AND HAVING condition
+    pub fn and_having<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        self.having_conditions.push(HavingCondition {
+            column_or_function: column,
+            operator,
+            value,
+            connector: WhereConnector::And,
+        });
+        self.parameters.push(self.having_conditions.last().unwrap().value.clone());
+        self
+    }
+}
+
+impl QueryBuilder for DeleteBuilderInitial {
+    fn to_sql(&self) -> Result<String> {
+        Err(Error::invalid_query("DELETE requires WHERE condition for safety"))
+    }
+
+    fn parameters(&self) -> &[Value] {
+        &[]
+    }
+
+    fn clone_builder(&self) -> Self {
+        self.clone()
+    }
+}
+
+impl QueryBuilder for InsertBuilderInitial {
+    fn to_sql(&self) -> Result<String> {
+        Err(Error::invalid_query("INSERT requires values"))
+    }
+
+    fn parameters(&self) -> &[Value] {
+        &[]
+    }
+
+    fn clone_builder(&self) -> Self {
+        self.clone()
+    }
+}
+
+impl QueryBuilder for SelectBuilderInitial {
+    fn to_sql(&self) -> Result<String> {
+        Err(Error::invalid_query("SELECT requires columns to be specified with .select()"))
+    }
+
+    fn parameters(&self) -> &[Value] {
+        &[]
+    }
+
+    fn clone_builder(&self) -> Self {
+        self.clone()
     }
 }
 
@@ -1947,10 +2070,11 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_without_where() {
-        let query = delete("users");
+    fn test_delete_with_where_required() {
+        // DELETE now requires WHERE condition for safety
+        let query = delete("users").where_(("id", 1));
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "DELETE FROM users");
+        assert_eq!(sql, "DELETE FROM users WHERE id = ?");
     }
 
     #[test]
@@ -1958,7 +2082,7 @@ mod tests {
         let query = crate::insert("users");
         let result = query.to_sql();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("INSERT requires columns and values"));
+        assert!(result.unwrap_err().to_string().contains("INSERT requires values"));
     }
 
     #[test]
@@ -2735,6 +2859,7 @@ mod tests {
             .where_(("total", op::GT, 100));
 
         let query = from("customers")
+            .select("*")
             .where_(("active", true))
             .where_in("id", subquery);
 
@@ -2753,6 +2878,7 @@ mod tests {
             .where_in("id", inner_subquery);
 
         let query = from("customers")
+            .select("*")
             .where_in("id", outer_subquery);
 
         let sql = query.to_sql().unwrap();
