@@ -1221,4 +1221,266 @@ mod tests {
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT DISTINCT users.role FROM users INNER JOIN departments ON users.dept_id = departments.id");
     }
+
+    #[test]
+    fn test_distinct_with_limit() {
+        let query = from("users")
+            .select("department")
+            .distinct()
+            .limit(5);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT department FROM users LIMIT 5");
+    }
+
+    #[test]
+    fn test_distinct_with_order_by() {
+        let query = from("users")
+            .select("status")
+            .distinct()
+            .order_by_asc("status");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT status FROM users ORDER BY status ASC");
+    }
+
+    #[test]
+    fn test_distinct_with_where() {
+        let query = from("users")
+            .where_(("active", true))
+            .select("department")
+            .distinct();
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT department FROM users WHERE active = ?");
+    }
+
+
+    #[test]
+    fn test_group_by_with_order_by() {
+        let query = from("orders")
+            .select("status")
+            .group_by("status")
+            .order_by_asc("status");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status FROM orders GROUP BY status ORDER BY status ASC");
+    }
+
+    #[test]
+    fn test_group_by_with_where() {
+        let query = from("orders")
+            .select("status")
+            .where_(("active", true))
+            .group_by("status");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status FROM orders WHERE active = ? GROUP BY status");
+    }
+
+    #[test]
+    fn test_having_count_distinct() {
+        let query = from("orders")
+            .select(vec![
+                ColumnSelector::Column("region".to_string()),
+                ColumnSelector::count_distinct("customer_id").as_alias("unique_customers"),
+                ColumnSelector::sum("total").as_alias("total_sales")
+            ])
+            .group_by("region")
+            .having(("COUNT(DISTINCT customer_id)", op::GT, 100));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT region, COUNT(DISTINCT(customer_id)) AS unique_customers, SUM(total) AS total_sales FROM orders GROUP BY region HAVING COUNT(DISTINCT customer_id) > ?");
+    }
+
+    #[test]
+    fn test_having_with_avg() {
+        let query = from("products")
+            .select(vec![
+                ColumnSelector::Column("category".to_string()),
+                ColumnSelector::avg("price").as_alias("avg_price")
+            ])
+            .group_by("category")
+            .having(("AVG(price)", op::LT, 100.0));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT category, AVG(price) AS avg_price FROM products GROUP BY category HAVING AVG(price) < ?");
+    }
+
+    #[test]
+    fn test_having_with_joins() {
+        let query = from("users")
+            .select(vec![
+                ColumnSelector::Column("users.department".to_string()),
+                ColumnSelector::count().as_alias("user_count"),
+                ColumnSelector::avg("salaries.amount").as_alias("avg_salary")
+            ])
+            .inner_join("salaries", "users.id", "salaries.user_id")
+            .group_by("users.department")
+            .having(("COUNT(*)", op::GTE, 5));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT users.department, COUNT(*) AS user_count, AVG(salaries.amount) AS avg_salary FROM users INNER JOIN salaries ON users.id = salaries.user_id GROUP BY users.department HAVING COUNT(*) >= ?");
+    }
+
+    #[test]
+    fn test_having_with_or_condition() {
+        let query = from("products")
+            .select(vec![
+                ColumnSelector::Column("category".to_string()),
+                ColumnSelector::count().as_alias("product_count"),
+                ColumnSelector::avg("price").as_alias("avg_price")
+            ])
+            .group_by("category")
+            .having(("COUNT(*)", op::GT, 10));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT category, COUNT(*) AS product_count, AVG(price) AS avg_price FROM products GROUP BY category HAVING COUNT(*) > ?");
+    }
+
+    #[test]
+    fn test_having_with_order_by() {
+        let query = from("products")
+            .select(vec![
+                ColumnSelector::Column("category".to_string()),
+                ColumnSelector::count().as_alias("product_count"),
+                ColumnSelector::max("price").as_alias("max_price")
+            ])
+            .group_by("category")
+            .having(("COUNT(*)", op::GT, 5))
+            .order_by_asc("product_count")
+            .order_by_desc("max_price");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT category, COUNT(*) AS product_count, MAX(price) AS max_price FROM products GROUP BY category HAVING COUNT(*) > ? ORDER BY product_count ASC, max_price DESC");
+    }
+
+    #[test]
+    fn test_having_with_sum() {
+        let query = from("sales")
+            .select(vec![
+                ColumnSelector::Column("region".to_string()),
+                ColumnSelector::sum("amount").as_alias("total_sales")
+            ])
+            .group_by("region")
+            .having(("SUM(amount)", op::GTE, 10000));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT region, SUM(amount) AS total_sales FROM sales GROUP BY region HAVING SUM(amount) >= ?");
+    }
+
+    #[test]
+    fn test_join_with_limit_offset() {
+        let query = from("users")
+            .inner_join("profiles", "users.id", "profiles.user_id")
+            .select("*")
+            .limit(10)
+            .offset(20);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id LIMIT 10 OFFSET 20");
+    }
+
+    #[test]
+    fn test_join_with_where_clause() {
+        let query = from("users")
+            .select(("users.name", "orders.total"))
+            .inner_join("orders", "users.id", "orders.user_id")
+            .where_(("users.active", true))
+            .and_where(("orders.status", "completed"));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT users.name, orders.total FROM users INNER JOIN orders ON users.id = orders.user_id WHERE users.active = ? AND orders.status = ?");
+    }
+
+    #[test]
+    fn test_multiple_order_by() {
+        let query = from("users")
+            .select("*")
+            .order_by_asc("name")
+            .order_by_desc("created_at")
+            .order_by_asc("id");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC, created_at DESC, id ASC");
+    }
+
+    #[test]
+    fn test_order_by_with_limit_offset() {
+        let query = from("users")
+            .select("*")
+            .order_by_asc("created_at")
+            .limit(25)
+            .offset(50);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at ASC LIMIT 25 OFFSET 50");
+    }
+
+    #[test]
+    fn test_order_by_with_where() {
+        let query = from("users")
+            .where_(("active", true))
+            .select("*")
+            .order_by_asc("name");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users WHERE active = ? ORDER BY name ASC");
+    }
+
+    #[test]
+    fn test_multiple_joins() {
+        let query = from("users")
+            .inner_join("profiles", "users.id", "profiles.user_id")
+            .left_join("orders", "users.id", "orders.user_id")
+            .right_join("categories", "orders.category_id", "categories.id")
+            .select("*");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id LEFT JOIN orders ON users.id = orders.user_id RIGHT JOIN categories ON orders.category_id = categories.id");
+    }
+
+    #[test]
+    fn test_mixed_columns_and_aggregations() {
+        let query = from("orders")
+            .select(vec![
+                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::count().as_alias("count"),
+                ColumnSelector::sum("total").as_alias("total_sales")
+            ]);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status, COUNT(*) AS count, SUM(total) AS total_sales FROM orders");
+    }
+
+    #[test]
+    fn test_having_with_where_and_group_by() {
+        let query = from("orders")
+            .select(vec![
+                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::count().as_alias("count"),
+                ColumnSelector::sum("total").as_alias("total_sales")
+            ])
+            .where_(("created_at", op::GTE, "2023-01-01"))
+            .group_by("status")
+            .having(("COUNT(*)", op::GT, 5));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status, COUNT(*) AS count, SUM(total) AS total_sales FROM orders WHERE created_at >= ? GROUP BY status HAVING COUNT(*) > ?");
+    }
+
+    #[test]
+    fn test_multiple_having_conditions() {
+        let query = from("orders")
+            .select(vec![
+                ColumnSelector::Column("customer_id".to_string()),
+                ColumnSelector::count().as_alias("order_count"),
+                ColumnSelector::sum("total").as_alias("total_spent")
+            ])
+            .group_by("customer_id")
+            .having(("COUNT(*)", op::GT, 3));
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT customer_id, COUNT(*) AS order_count, SUM(total) AS total_spent FROM orders GROUP BY customer_id HAVING COUNT(*) > ?");
+    }
 }
