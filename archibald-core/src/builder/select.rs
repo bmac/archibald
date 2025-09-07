@@ -946,7 +946,9 @@ impl QueryBuilder for SelectBuilderComplete {
                 }
 
                 sql.push_str(&condition.column);
-                sql.push(' ');
+                if !condition.column.is_empty() {
+                    sql.push(' ');
+                }
                 sql.push_str(condition.operator.as_str());
                 sql.push(' ');
                 sql.push_str(&condition.subquery.to_sql()?);
@@ -1759,7 +1761,7 @@ mod tests {
             .select("*");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM customers WHERE  EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ?)");
+        assert_eq!(sql, "SELECT * FROM customers WHERE EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ?)");
     }
 
     #[test]
@@ -1786,7 +1788,7 @@ mod tests {
             .select("*");
 
         let sql = query.to_sql().unwrap();
-        assert_eq!(sql, "SELECT * FROM customers WHERE  NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ?)");
+        assert_eq!(sql, "SELECT * FROM customers WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ?)");
     }
 
     #[test]
