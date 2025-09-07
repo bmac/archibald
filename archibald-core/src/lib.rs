@@ -17,7 +17,7 @@ pub use builder::common::{
 pub use builder::select::{ColumnSelector, SelectBuilderComplete, SelectBuilderInitial, Subquery};
 pub use builder::{
     DeleteBuilderComplete, DeleteBuilderInitial, InsertBuilderComplete, InsertBuilderInitial,
-    UpdateBuilder,
+    UpdateBuilderComplete, UpdateBuilderInitial, UpdateBuilderWithSet,
 };
 pub use error::{Error, Result};
 pub use executor::{
@@ -33,8 +33,8 @@ pub fn from(name: &str) -> SelectBuilderInitial {
 }
 
 /// Create a new UPDATE query builder for the given table
-pub fn update(name: &str) -> UpdateBuilder {
-    builder::UpdateBuilder::new(name)
+pub fn update(name: &str) -> UpdateBuilderInitial {
+    builder::UpdateBuilderInitial::new(name)
 }
 
 /// Create a new DELETE query builder for the given table

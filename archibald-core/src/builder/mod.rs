@@ -9,4 +9,4 @@ pub mod update;
 // Re-export types from submodules
 pub use delete::{DeleteBuilderComplete, DeleteBuilderInitial};
 pub use insert::{InsertBuilderComplete, InsertBuilderInitial, IntoInsertData};
-pub use update::{IntoUpdateData, UpdateBuilder};
+pub use update::{IntoUpdateData, UpdateBuilderComplete, UpdateBuilderInitial, UpdateBuilderWithSet};

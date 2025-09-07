@@ -281,8 +281,8 @@ impl ExecutableModification for crate::builder::InsertBuilderComplete {
     }
 }
 
-// Implementation for UpdateBuilder
-impl ExecutableModification for crate::builder::UpdateBuilder {
+// Implementation for UpdateBuilderComplete
+impl ExecutableModification for crate::builder::UpdateBuilderComplete {
     async fn execute<P>(self, pool: &P) -> Result<u64>
     where
         P: ConnectionPool,
@@ -1037,7 +1037,7 @@ mod tests {
             crate::Value::String("Updated".to_string()),
         );
 
-        let query = crate::builder::UpdateBuilder::new("users")
+        let query = crate::update("users")
             .set(updates)
             .where_(("id", 1));
 
