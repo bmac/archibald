@@ -156,3 +156,35 @@ impl IntoUpdateData for std::collections::HashMap<String, Value> {
         self.into_iter().collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::update;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_update_builder() {
+        let mut data = HashMap::new();
+        data.insert("name".to_string(), "John Updated".into());
+        data.insert("age".to_string(), 31.into());
+
+        let query = update("users")
+            .set(data)
+            .where_(("id", 1));
+
+        let sql = query.to_sql().unwrap();
+        // Note: HashMap iteration order is not guaranteed
+        assert!(sql.starts_with("UPDATE users SET"));
+        assert!(sql.contains("WHERE id = ?"));
+        assert!(sql.contains("name = ?") && sql.contains("age = ?"));
+    }
+
+    #[test]
+    fn test_update_without_set_fails() {
+        let query = update("users").where_(("id", 1));
+        let result = query.to_sql();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("UPDATE requires SET"));
+    }
+}

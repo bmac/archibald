@@ -3,7 +3,7 @@
 use crate::{Result, Error, Value};
 use super::common::{
     QueryBuilder, IntoCondition, WhereCondition, WhereConnector, 
-    AggregateFunction, IntoColumnSelectors, JoinType, JoinConnector, JoinClause,
+    AggregateFunction, IntoColumns, IntoColumnSelectors, JoinType, JoinConnector, JoinClause,
     SortDirection, OrderByClause, GroupByClause, HavingCondition
 };
 
@@ -357,9 +357,12 @@ impl SelectBuilderInitial {
     }
 
     /// Add a GROUP BY clause
-    pub fn group_by(mut self, columns: &str) -> Self {
+    pub fn group_by<C>(mut self, columns: C) -> Self
+    where
+        C: IntoColumns,
+    {
         self.group_by_clause = Some(GroupByClause {
-            columns: columns.split(',').map(|c| c.trim().to_string()).collect(),
+            columns: columns.into_columns(),
         });
         self
     }
@@ -533,9 +536,12 @@ impl SelectBuilderComplete {
     }
 
     /// Add a GROUP BY clause
-    pub fn group_by(mut self, columns: &str) -> Self {
+    pub fn group_by<C>(mut self, columns: C) -> Self
+    where
+        C: IntoColumns,
+    {
         self.group_by_clause = Some(GroupByClause {
-            columns: columns.split(',').map(|c| c.trim().to_string()).collect(),
+            columns: columns.into_columns(),
         });
         self
     }
@@ -759,5 +765,154 @@ impl QueryBuilder for SelectBuilderComplete {
 
     fn clone_builder(&self) -> Self {
         self.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::operator::op;
+    use crate::from;
+
+    #[test]
+    fn test_basic_select() {
+        let query = from("users").select("*");
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users");
+    }
+
+    #[test]
+    fn test_select_columns() {
+        let query = from("users").select(("id", "name"));
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT id, name FROM users");
+    }
+
+    #[test]
+    fn test_select_with_where() {
+        let query = from("users").select("*").where_(("age", op::GT, 18));
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users WHERE age > ?");
+    }
+
+    #[test]
+    fn test_multiple_where_conditions() {
+        let query = from("users")
+            .select("*")
+            .where_(("age", op::GT, 18))
+            .where_(("name", "John"));
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users WHERE age > ? AND name = ?");
+    }
+
+    #[test]
+    fn test_or_where() {
+        let query = from("users")
+            .select("*")
+            .where_(("age", op::GT, 18))
+            .or_where(("status", "admin"));
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users WHERE age > ? OR status = ?");
+    }
+
+    #[test]
+    fn test_limit_and_offset() {
+        let query = from("users")
+            .select("*")
+            .limit(10)
+            .offset(5);
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users LIMIT 10 OFFSET 5");
+    }
+
+    #[test]
+    fn test_inner_join() {
+        let query = from("users")
+            .select("*")
+            .inner_join("profiles", "users.id", "profiles.user_id");
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users INNER JOIN profiles ON users.id = profiles.user_id");
+    }
+
+    #[test]
+    fn test_left_join() {
+        let query = from("users")
+            .select("*")
+            .left_join("profiles", "users.id", "profiles.user_id");
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users LEFT JOIN profiles ON users.id = profiles.user_id");
+    }
+
+    #[test]
+    fn test_right_join() {
+        let query = from("users")
+            .select("*")
+            .right_join("profiles", "users.id", "profiles.user_id");
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users RIGHT JOIN profiles ON users.id = profiles.user_id");
+    }
+
+    #[test]
+    fn test_order_by_with_direction() {
+        let query = from("users")
+            .select("*")
+            .order_by("name", SortDirection::Desc);
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY name DESC");
+    }
+
+    #[test]
+    fn test_order_by_asc() {
+        let query = from("users")
+            .select("*")
+            .order_by_asc("name");
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY name ASC");
+    }
+
+    #[test]
+    fn test_order_by_desc() {
+        let query = from("users")
+            .select("*")
+            .order_by_desc("created_at");
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC");
+    }
+
+    #[test]
+    fn test_group_by_single_column() {
+        let query = from("users")
+            .select("*")
+            .group_by("department");
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users GROUP BY department");
+    }
+
+    #[test]
+    fn test_group_by_multiple_columns() {
+        let query = from("users")
+            .select("*")
+            .group_by(("department", "status"));
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users GROUP BY department, status");
+    }
+
+    #[test]
+    fn test_distinct_basic() {
+        let query = from("users")
+            .select("status")
+            .distinct();
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT status FROM users");
+    }
+
+    #[test]
+    fn test_having_basic() {
+        let query = from("users")
+            .select("*")
+            .group_by("department")
+            .having(("COUNT(*)", op::GT, 5));
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users GROUP BY department HAVING COUNT(*) > ?");
     }
 }

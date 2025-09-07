@@ -147,3 +147,50 @@ impl IntoInsertData for std::collections::HashMap<String, Value> {
         (columns, values)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::insert;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_insert_builder() {
+        let mut data = HashMap::new();
+        data.insert("name".to_string(), "John".into());
+        data.insert("age".to_string(), 30.into());
+
+        let query = insert("users").values(data);
+        let sql = query.to_sql().unwrap();
+        // Note: HashMap iteration order is not guaranteed, so we check both possible orders
+        assert!(
+            sql == "INSERT INTO users (name, age) VALUES (?, ?)" ||
+            sql == "INSERT INTO users (age, name) VALUES (?, ?)"
+        );
+    }
+
+    #[test]
+    fn test_insert_many() {
+        let mut data1 = HashMap::new();
+        data1.insert("name".to_string(), "John".into());
+        data1.insert("age".to_string(), 30.into());
+
+        let mut data2 = HashMap::new();
+        data2.insert("name".to_string(), "Jane".into());
+        data2.insert("age".to_string(), 25.into());
+
+        let query = insert("users").values_many(vec![data1, data2]);
+        let sql = query.to_sql().unwrap();
+        // Check that we have multiple value groups
+        assert!(sql.contains("VALUES (?, ?), (?, ?)"));
+        assert!(sql.starts_with("INSERT INTO users"));
+    }
+
+    #[test]
+    fn test_insert_empty_data_fails() {
+        let query = insert("users");
+        let result = query.to_sql();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("INSERT requires values"));
+    }
+}

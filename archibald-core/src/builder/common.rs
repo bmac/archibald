@@ -429,3 +429,51 @@ impl IntoColumnSelectors for (&str, crate::ColumnSelector, crate::ColumnSelector
 // Forward declarations - these will be defined in select.rs
 // pub struct Subquery;
 // pub struct SubqueryCondition;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::operator::op;
+
+    #[test]
+    fn test_string_operator_conversion() {
+        // Test that string operators work in conditions
+        let condition = ("age", ">", 18);
+        let (column, operator, value) = condition.into_condition();
+        assert_eq!(column, "age");
+        assert_eq!(operator, op::GT);
+        assert_eq!(value, 18.into());
+    }
+
+    #[test]
+    fn test_condition_trait_implementations() {
+        // Test shorthand equality
+        let condition = ("name", "John");
+        let (column, operator, value) = condition.into_condition();
+        assert_eq!(column, "name");
+        assert_eq!(operator, op::EQ);
+        assert_eq!(value, "John".into());
+
+        // Test explicit operators
+        let condition = ("age", op::GT, 18);
+        let (column, operator, value) = condition.into_condition();
+        assert_eq!(column, "age");
+        assert_eq!(operator, op::GT);
+        assert_eq!(value, 18.into());
+    }
+
+    #[test] 
+    fn test_into_columns_implementations() {
+        // Single string
+        let cols = "name".into_columns();
+        assert_eq!(cols, vec!["name"]);
+
+        // Tuple
+        let cols = ("name", "age").into_columns();
+        assert_eq!(cols, vec!["name", "age"]);
+
+        // Vector
+        let cols = vec!["name", "age"].into_columns();
+        assert_eq!(cols, vec!["name", "age"]);
+    }
+}

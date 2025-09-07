@@ -157,3 +157,42 @@ impl QueryBuilder for DeleteBuilderComplete {
         self.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::delete;
+    use crate::operator::op;
+
+    #[test]
+    fn test_delete_builder() {
+        let query = delete("users").where_(("age", op::LT, 18));
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "DELETE FROM users WHERE age < ?");
+    }
+
+    #[test]
+    fn test_delete_with_where_required() {
+        // DELETE now requires WHERE condition for safety
+        let query = delete("users").where_(("id", 1));
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "DELETE FROM users WHERE id = ?");
+    }
+
+    #[test]
+    fn test_delete_multiple_conditions() {
+        let query = delete("users")
+            .where_(("age", op::LT, 18))
+            .or_where(("status", "inactive"));
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "DELETE FROM users WHERE age < ? OR status = ?");
+    }
+
+    #[test]
+    fn test_delete_without_where_fails() {
+        let query = delete("users");
+        let result = query.to_sql();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("DELETE requires WHERE condition for safety"));
+    }
+}
