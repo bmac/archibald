@@ -234,13 +234,13 @@ impl ColumnSelector {
 /// Subquery wrapper for use in various SQL contexts
 #[derive(Debug, Clone)]
 pub struct Subquery {
-    pub query: Box<SelectBuilder>,
+    pub query: Box<SelectBuilderComplete>,
     pub alias: Option<String>,
 }
 
 impl Subquery {
     /// Create a new subquery from a SelectBuilder
-    pub fn new(query: SelectBuilder) -> Self {
+    pub fn new(query: SelectBuilderComplete) -> Self {
         Self {
             query: Box::new(query),
             alias: None,
@@ -248,7 +248,7 @@ impl Subquery {
     }
     
     /// Create a subquery with an alias (required for FROM/JOIN subqueries)
-    pub fn with_alias(query: SelectBuilder, alias: &str) -> Self {
+    pub fn with_alias(query: SelectBuilderComplete, alias: &str) -> Self {
         Self {
             query: Box::new(query),
             alias: Some(alias.to_string()),
@@ -276,7 +276,7 @@ impl Subquery {
 /// Subquery column selector for SELECT clauses
 impl ColumnSelector {
     /// Create a subquery column selector
-    pub fn subquery(query: SelectBuilder) -> Self {
+    pub fn subquery(query: SelectBuilderComplete) -> Self {
         Self::SubqueryColumn {
             subquery: Subquery::new(query),
             alias: None,
@@ -284,7 +284,7 @@ impl ColumnSelector {
     }
     
     /// Create a subquery column selector with alias
-    pub fn subquery_as(query: SelectBuilder, alias: &str) -> Self {
+    pub fn subquery_as(query: SelectBuilderComplete, alias: &str) -> Self {
         Self::SubqueryColumn {
             subquery: Subquery::new(query),
             alias: Some(alias.to_string()),
@@ -420,113 +420,9 @@ pub struct SelectBuilderComplete {
     parameters: Vec<Value>,
 }
 
-/// Type alias for backwards compatibility
-pub type SelectBuilder = SelectBuilderComplete;
+// No backwards compatibility - use SelectBuilderComplete directly
 
-impl SelectBuilderComplete {
-    /// Create a new SELECT query builder (backwards compatibility)
-    /// Note: This creates a SelectBuilderComplete with SELECT * by default
-    pub fn new(table: &str) -> Self {
-        Self {
-            table_name: table.to_string(),
-            selected_columns: vec![ColumnSelector::Column("*".to_string())],
-            where_conditions: Vec::new(),
-            subquery_conditions: Vec::new(),
-            join_clauses: Vec::new(),
-            order_by_clauses: Vec::new(),
-            group_by_clause: None,
-            having_conditions: Vec::new(),
-            distinct: false,
-            limit_value: None,
-            offset_value: None,
-            parameters: Vec::new(),
-        }
-    }
-    
-    /// Select specific columns (backwards compatibility - overwrites existing selection)
-    pub fn select<T>(mut self, columns: T) -> Self
-    where
-        T: IntoColumnSelectors,
-    {
-        self.selected_columns = columns.into_column_selectors();
-        self
-    }
-    
-    /// Add all the JOIN methods for backwards compatibility
-    pub fn left_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
-        self.join_clauses.push(JoinClause {
-            join_type: JoinType::Left,
-            table: table.to_string(),
-            on_conditions: vec![JoinCondition {
-                left_column: left_col.to_string(),
-                operator: Operator::EQ,
-                right_column: right_col.to_string(),
-                connector: JoinConnector::And,
-            }],
-        });
-        self
-    }
-    
-    pub fn right_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
-        self.join_clauses.push(JoinClause {
-            join_type: JoinType::Right,
-            table: table.to_string(),
-            on_conditions: vec![JoinCondition {
-                left_column: left_col.to_string(),
-                operator: Operator::EQ,
-                right_column: right_col.to_string(),
-                connector: JoinConnector::And,
-            }],
-        });
-        self
-    }
-    
-    pub fn full_outer_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
-        self.join_clauses.push(JoinClause {
-            join_type: JoinType::FullOuter,
-            table: table.to_string(),
-            on_conditions: vec![JoinCondition {
-                left_column: left_col.to_string(),
-                operator: Operator::EQ,
-                right_column: right_col.to_string(),
-                connector: JoinConnector::And,
-            }],
-        });
-        self
-    }
-    
-    pub fn cross_join(mut self, table: &str) -> Self {
-        self.join_clauses.push(JoinClause {
-            join_type: JoinType::Cross,
-            table: table.to_string(),
-            on_conditions: vec![],
-        });
-        self
-    }
-    
-    pub fn join<O>(mut self, join_type: JoinType, table: &str, left_col: &str, operator: O, right_col: &str) -> Self
-    where
-        O: IntoOperator,
-    {
-        self.join_clauses.push(JoinClause {
-            join_type,
-            table: table.to_string(),
-            on_conditions: vec![JoinCondition {
-                left_column: left_col.to_string(),
-                operator: operator.into_operator(),
-                right_column: right_col.to_string(),
-                connector: JoinConnector::And,
-            }],
-        });
-        self
-    }
-    
-    /// Add DISTINCT clause
-    pub fn distinct(mut self) -> Self {
-        self.distinct = true;
-        self
-    }
-}
+// SelectBuilderComplete has no constructor - can only be created by calling .select() on SelectBuilderInitial
 
 impl SelectBuilderInitial {
     /// Create a new SELECT query builder in initial state
@@ -911,7 +807,7 @@ impl SelectBuilderInitial {
     /// let subquery = from("orders").select("customer_id").where_(("status", "active"));
     /// let query = from("customers").where_in("id", subquery);
     /// ```
-    pub fn where_in(mut self, column: &str, subquery: SelectBuilder) -> Self {
+    pub fn where_in(mut self, column: &str, subquery: SelectBuilderComplete) -> Self {
         let subquery_wrapper = Subquery::new(subquery);
         self.subquery_conditions.push(SubqueryCondition {
             column: column.to_string(),
@@ -923,7 +819,7 @@ impl SelectBuilderInitial {
     }
     
     /// Add WHERE condition with NOT IN subquery
-    pub fn where_not_in(mut self, column: &str, subquery: SelectBuilder) -> Self {
+    pub fn where_not_in(mut self, column: &str, subquery: SelectBuilderComplete) -> Self {
         let subquery_wrapper = Subquery::new(subquery);
         self.subquery_conditions.push(SubqueryCondition {
             column: column.to_string(),
@@ -935,7 +831,7 @@ impl SelectBuilderInitial {
     }
     
     /// Add WHERE EXISTS subquery condition
-    pub fn where_exists(mut self, subquery: SelectBuilder) -> Self {
+    pub fn where_exists(mut self, subquery: SelectBuilderComplete) -> Self {
         let subquery_wrapper = Subquery::new(subquery);
         self.subquery_conditions.push(SubqueryCondition {
             column: "".to_string(), // EXISTS doesn't need a column
@@ -947,7 +843,7 @@ impl SelectBuilderInitial {
     }
     
     /// Add WHERE NOT EXISTS subquery condition
-    pub fn where_not_exists(mut self, subquery: SelectBuilder) -> Self {
+    pub fn where_not_exists(mut self, subquery: SelectBuilderComplete) -> Self {
         let subquery_wrapper = Subquery::new(subquery);
         self.subquery_conditions.push(SubqueryCondition {
             column: "".to_string(), // NOT EXISTS doesn't need a column

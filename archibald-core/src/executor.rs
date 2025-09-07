@@ -215,7 +215,7 @@ pub trait ExecutableModification: QueryBuilder {
 }
 
 // Implementation for SelectBuilder
-impl<T> ExecutableQuery<T> for crate::SelectBuilder
+impl<T> ExecutableQuery<T> for crate::SelectBuilderComplete
 where
     T: DeserializeOwned + Send + Unpin,
 {
