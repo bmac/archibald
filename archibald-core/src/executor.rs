@@ -275,7 +275,7 @@ where
 }
 
 // Implementation for InsertBuilder
-impl ExecutableModification for crate::InsertBuilder {
+impl ExecutableModification for crate::InsertBuilderComplete {
     async fn execute<P>(self, pool: &P) -> Result<u64>
     where
         P: ConnectionPool,
@@ -1004,7 +1004,7 @@ mod tests {
         data.insert("name".to_string(), crate::Value::String("Test".to_string()));
         data.insert("email".to_string(), crate::Value::String("test@example.com".to_string()));
         
-        let query = crate::InsertBuilder::new("users").values(data);
+        let query = crate::insert("users").values(data);
         let affected = query.execute(&pool).await.unwrap();
         assert_eq!(affected, 1);
     }
@@ -1051,7 +1051,7 @@ mod tests {
         let mut data = HashMap::new();
         data.insert("name".to_string(), crate::Value::String("Test".to_string()));
         
-        let query = crate::InsertBuilder::new("users").values(data);
+        let query = crate::insert("users").values(data);
         let result = query.execute(&pool).await;
         assert!(result.is_err());
     }

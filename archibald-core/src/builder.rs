@@ -1451,27 +1451,34 @@ impl IntoColumns for (&str, &str, &str, &str) {
     }
 }
 
-/// INSERT query builder
+/// INSERT query builder in initial state (before values() is called)
+/// Can build conditions but cannot execute queries
 #[derive(Debug, Clone)]
-pub struct InsertBuilder {
+pub struct InsertBuilderInitial {
+    table_name: String,
+}
+
+/// INSERT query builder in complete state (after values() is called)
+/// Can execute queries but cannot call values() again
+#[derive(Debug, Clone)]
+pub struct InsertBuilderComplete {
     table_name: String,
     columns: Vec<String>,
     values: Vec<Vec<Value>>,
     parameters: Vec<Value>,
 }
 
-impl InsertBuilder {
-    /// Create a new INSERT query builder
+// No backwards compatibility - use InsertBuilderComplete directly
+
+impl InsertBuilderInitial {
+    /// Create a new INSERT query builder in initial state
     pub fn new(table: &str) -> Self {
         Self {
             table_name: table.to_string(),
-            columns: Vec::new(),
-            values: Vec::new(),
-            parameters: Vec::new(),
         }
     }
     
-    /// Add values for a single record
+    /// Add values for a single record, transitioning to InsertBuilderComplete
     /// 
     /// # Examples
     /// ```
@@ -1484,35 +1491,52 @@ impl InsertBuilder {
     /// 
     /// let query = insert("users").values(data);
     /// ```
-    pub fn values<T>(mut self, data: T) -> Self
+    pub fn values<T>(self, data: T) -> InsertBuilderComplete
     where
         T: IntoInsertData,
     {
         let (columns, values) = data.into_insert_data();
-        self.columns = columns;
-        self.values.push(values);
-        self
+        InsertBuilderComplete {
+            table_name: self.table_name,
+            columns,
+            values: vec![values],
+            parameters: Vec::new(),
+        }
     }
     
-    /// Add values for multiple records
-    pub fn values_many<T>(mut self, data: Vec<T>) -> Self
+    /// Add values for multiple records, transitioning to InsertBuilderComplete
+    pub fn values_many<T>(self, data: Vec<T>) -> InsertBuilderComplete
     where
         T: IntoInsertData + Clone,
     {
+        let mut columns = Vec::new();
+        let mut values_vec = Vec::new();
+        
         if let Some(first) = data.first() {
-            let (columns, _) = first.clone().into_insert_data();
-            self.columns = columns;
+            let (cols, _) = first.clone().into_insert_data();
+            columns = cols;
             
             for item in data {
-                let (_, values) = item.into_insert_data();
-                self.values.push(values);
+                let (_, vals) = item.into_insert_data();
+                values_vec.push(vals);
             }
         }
-        self
+        
+        InsertBuilderComplete {
+            table_name: self.table_name,
+            columns,
+            values: values_vec,
+            parameters: Vec::new(),
+        }
     }
 }
 
-impl QueryBuilder for InsertBuilder {
+// InsertBuilderComplete has no constructor - can only be created by calling .values() on InsertBuilderInitial
+
+// InsertBuilderInitial deliberately does NOT implement QueryBuilder
+// This prevents calling to_sql(), parameters(), etc. at compile time
+
+impl QueryBuilder for InsertBuilderComplete {
     fn to_sql(&self) -> Result<String> {
         if self.columns.is_empty() || self.values.is_empty() {
             return Err(crate::Error::invalid_query("INSERT requires columns and values"));
@@ -1924,7 +1948,7 @@ mod tests {
         data.insert("name".to_string(), Value::String("John".to_string()));
         data.insert("age".to_string(), Value::I32(30));
         
-        let query = InsertBuilder::new("users").values(data);
+        let query = crate::insert("users").values(data);
         let sql = query.to_sql().unwrap();
         
         // Note: HashMap iteration order is not guaranteed, so we just check structure
@@ -1945,7 +1969,7 @@ mod tests {
         data2.insert("name".to_string(), Value::String("Jane".to_string()));
         data2.insert("age".to_string(), Value::I32(25));
         
-        let query = InsertBuilder::new("users").values_many(vec![data1, data2]);
+        let query = crate::insert("users").values_many(vec![data1, data2]);
         let sql = query.to_sql().unwrap();
         
         assert!(sql.starts_with("INSERT INTO users ("));
@@ -1997,7 +2021,7 @@ mod tests {
     
     #[test]
     fn test_insert_empty_data_fails() {
-        let query = InsertBuilder::new("users");
+        let query = crate::insert("users");
         let result = query.to_sql();
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("INSERT requires columns and values"));
