@@ -12,7 +12,7 @@ pub mod executor;
 // Re-export main types
 pub use error::{Error, Result};
 pub use operator::{Operator, IntoOperator, op};
-pub use builder::{QueryBuilder, SelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder, JoinType, SortDirection, ColumnSelector, AggregateFunction, Subquery};
+pub use builder::{QueryBuilder, SelectBuilder, SelectBuilderInitial, SelectBuilderComplete, InsertBuilder, UpdateBuilder, DeleteBuilder, JoinType, SortDirection, ColumnSelector, AggregateFunction, Subquery};
 pub use value::Value;
 pub use executor::{
     ConnectionPool, ExecutableQuery, ExecutableModification, 
@@ -20,8 +20,8 @@ pub use executor::{
 };
 
 /// Create a new SELECT query builder for the given table
-pub fn from(name: &str) -> SelectBuilder {
-    SelectBuilder::new(name)
+pub fn from(name: &str) -> SelectBuilderInitial {
+    SelectBuilderInitial::new(name)
 }
 
 /// Create a new UPDATE query builder for the given table

@@ -385,9 +385,27 @@ pub struct SubqueryCondition {
     pub connector: WhereConnector,
 }
 
-/// SELECT query builder
+/// SELECT query builder in initial state (before select() is called)
+/// Can build conditions but cannot execute queries
 #[derive(Debug, Clone)]
-pub struct SelectBuilder {
+pub struct SelectBuilderInitial {
+    table_name: String,
+    where_conditions: Vec<WhereCondition>,
+    subquery_conditions: Vec<SubqueryCondition>,
+    join_clauses: Vec<JoinClause>,
+    order_by_clauses: Vec<OrderByClause>,
+    group_by_clause: Option<GroupByClause>,
+    having_conditions: Vec<HavingCondition>,
+    distinct: bool,
+    limit_value: Option<u64>,
+    offset_value: Option<u64>,
+    parameters: Vec<Value>,
+}
+
+/// SELECT query builder in complete state (after select() is called)
+/// Can execute queries but cannot call select() again
+#[derive(Debug, Clone)]
+pub struct SelectBuilderComplete {
     table_name: String,
     selected_columns: Vec<ColumnSelector>,
     where_conditions: Vec<WhereCondition>,
@@ -402,8 +420,12 @@ pub struct SelectBuilder {
     parameters: Vec<Value>,
 }
 
-impl SelectBuilder {
-    /// Create a new SELECT query builder
+/// Type alias for backwards compatibility
+pub type SelectBuilder = SelectBuilderComplete;
+
+impl SelectBuilderComplete {
+    /// Create a new SELECT query builder (backwards compatibility)
+    /// Note: This creates a SelectBuilderComplete with SELECT * by default
     pub fn new(table: &str) -> Self {
         Self {
             table_name: table.to_string(),
@@ -421,14 +443,7 @@ impl SelectBuilder {
         }
     }
     
-    /// Select specific columns
-    /// 
-    /// # Examples
-    /// ```
-    /// use archibald_core::from;
-    /// 
-    /// let query = from("users").select(("id", "name", "email"));
-    /// ```
+    /// Select specific columns (backwards compatibility - overwrites existing selection)
     pub fn select<T>(mut self, columns: T) -> Self
     where
         T: IntoColumnSelectors,
@@ -437,10 +452,144 @@ impl SelectBuilder {
         self
     }
     
-    /// Select all columns (equivalent to SELECT *)
-    pub fn select_all(mut self) -> Self {
-        self.selected_columns = vec![ColumnSelector::Column("*".to_string())];
+    /// Add all the JOIN methods for backwards compatibility
+    pub fn left_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Left,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: Operator::EQ,
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
         self
+    }
+    
+    pub fn right_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Right,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: Operator::EQ,
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+    
+    pub fn full_outer_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::FullOuter,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: Operator::EQ,
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+    
+    pub fn cross_join(mut self, table: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Cross,
+            table: table.to_string(),
+            on_conditions: vec![],
+        });
+        self
+    }
+    
+    pub fn join<O>(mut self, join_type: JoinType, table: &str, left_col: &str, operator: O, right_col: &str) -> Self
+    where
+        O: IntoOperator,
+    {
+        self.join_clauses.push(JoinClause {
+            join_type,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: operator.into_operator(),
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+    
+    /// Add DISTINCT clause
+    pub fn distinct(mut self) -> Self {
+        self.distinct = true;
+        self
+    }
+}
+
+impl SelectBuilderInitial {
+    /// Create a new SELECT query builder in initial state
+    pub fn new(table: &str) -> Self {
+        Self {
+            table_name: table.to_string(),
+            where_conditions: Vec::new(),
+            subquery_conditions: Vec::new(),
+            join_clauses: Vec::new(),
+            order_by_clauses: Vec::new(),
+            group_by_clause: None,
+            having_conditions: Vec::new(),
+            distinct: false,
+            limit_value: None,
+            offset_value: None,
+            parameters: Vec::new(),
+        }
+    }
+    
+    /// Select specific columns, transitioning to SelectBuilderComplete
+    /// 
+    /// # Examples
+    /// ```
+    /// use archibald_core::from;
+    /// 
+    /// let query = from("users").select(("id", "name", "email"));
+    /// ```
+    pub fn select<T>(self, columns: T) -> SelectBuilderComplete
+    where
+        T: IntoColumnSelectors,
+    {
+        SelectBuilderComplete {
+            table_name: self.table_name,
+            selected_columns: columns.into_column_selectors(),
+            where_conditions: self.where_conditions,
+            subquery_conditions: self.subquery_conditions,
+            join_clauses: self.join_clauses,
+            order_by_clauses: self.order_by_clauses,
+            group_by_clause: self.group_by_clause,
+            having_conditions: self.having_conditions,
+            distinct: self.distinct,
+            limit_value: self.limit_value,
+            offset_value: self.offset_value,
+            parameters: self.parameters,
+        }
+    }
+    
+    /// Select all columns (equivalent to SELECT *), transitioning to SelectBuilderComplete
+    pub fn select_all(self) -> SelectBuilderComplete {
+        SelectBuilderComplete {
+            table_name: self.table_name,
+            selected_columns: vec![ColumnSelector::Column("*".to_string())],
+            where_conditions: self.where_conditions,
+            subquery_conditions: self.subquery_conditions,
+            join_clauses: self.join_clauses,
+            order_by_clauses: self.order_by_clauses,
+            group_by_clause: self.group_by_clause,
+            having_conditions: self.having_conditions,
+            distinct: self.distinct,
+            limit_value: self.limit_value,
+            offset_value: self.offset_value,
+            parameters: self.parameters,
+        }
     }
     
     /// Add a WHERE condition
@@ -810,7 +959,142 @@ impl SelectBuilder {
     }
 }
 
-impl QueryBuilder for SelectBuilder {
+impl SelectBuilderComplete {
+    /// Add a WHERE condition (for completed select queries)
+    pub fn where_<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        
+        self.where_conditions.push(WhereCondition {
+            column,
+            operator,
+            value,
+            connector: WhereConnector::And,
+        });
+        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
+        
+        self
+    }
+    
+    /// Add an OR WHERE condition
+    pub fn or_where<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        
+        self.where_conditions.push(WhereCondition {
+            column,
+            operator,
+            value,
+            connector: WhereConnector::Or,
+        });
+        self.parameters.push(self.where_conditions.last().unwrap().value.clone());
+        
+        self
+    }
+    
+    /// Add an AND WHERE condition (alias for where_)
+    pub fn and_where<C>(self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        self.where_(condition)
+    }
+    
+    /// Add a LIMIT clause
+    pub fn limit(mut self, limit: u64) -> Self {
+        self.limit_value = Some(limit);
+        self
+    }
+    
+    /// Add an OFFSET clause
+    pub fn offset(mut self, offset: u64) -> Self {
+        self.offset_value = Some(offset);
+        self
+    }
+    
+    /// Add INNER JOIN clause
+    pub fn inner_join(mut self, table: &str, left_col: &str, right_col: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Inner,
+            table: table.to_string(),
+            on_conditions: vec![JoinCondition {
+                left_column: left_col.to_string(),
+                operator: Operator::EQ,
+                right_column: right_col.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+    
+    /// Add GROUP BY clause
+    pub fn group_by<C>(mut self, columns: C) -> Self 
+    where
+        C: IntoColumns,
+    {
+        self.group_by_clause = Some(GroupByClause {
+            columns: columns.into_columns(),
+        });
+        self
+    }
+    
+    /// Add HAVING condition
+    pub fn having<C>(mut self, condition: C) -> Self
+    where
+        C: IntoCondition,
+    {
+        let (column, operator, value) = condition.into_condition();
+        
+        self.having_conditions.push(HavingCondition {
+            column_or_function: column,
+            operator,
+            value,
+            connector: WhereConnector::And,
+        });
+        self.parameters.push(self.having_conditions.last().unwrap().value.clone());
+        
+        self
+    }
+    
+    /// Add ORDER BY clause
+    pub fn order_by(mut self, column: &str, direction: SortDirection) -> Self {
+        self.order_by_clauses.push(OrderByClause {
+            column: column.to_string(),
+            direction,
+        });
+        self
+    }
+    
+    /// Add WHERE IN subquery condition
+    pub fn where_in(mut self, column: &str, subquery: SelectBuilderComplete) -> Self {
+        let subquery_wrapper = Subquery::new(subquery);
+        self.subquery_conditions.push(SubqueryCondition {
+            column: column.to_string(),
+            operator: Operator::IN,
+            subquery: subquery_wrapper,
+            connector: WhereConnector::And,
+        });
+        self
+    }
+    
+    /// Add WHERE EXISTS subquery condition
+    pub fn where_exists(mut self, subquery: SelectBuilderComplete) -> Self {
+        let subquery_wrapper = Subquery::new(subquery);
+        self.subquery_conditions.push(SubqueryCondition {
+            column: "".to_string(), // EXISTS doesn't need a column
+            operator: Operator::EXISTS,
+            subquery: subquery_wrapper,
+            connector: WhereConnector::And,
+        });
+        self
+    }
+}
+
+impl QueryBuilder for SelectBuilderComplete {
     fn to_sql(&self) -> Result<String> {
         // Validate all operators before generating SQL
         for condition in &self.where_conditions {
@@ -837,115 +1121,70 @@ impl QueryBuilder for SelectBuilder {
         
         // SELECT clause
         sql.push_str("SELECT ");
+        
         if self.distinct {
             sql.push_str("DISTINCT ");
         }
-        let column_strs: Vec<String> = self.selected_columns.iter().map(|col| col.to_sql()).collect();
-        sql.push_str(&column_strs.join(", "));
+        
+        let column_strings: Vec<String> = self.selected_columns.iter().map(|col| col.to_sql()).collect();
+        sql.push_str(&column_strings.join(", "));
         
         // FROM clause
-        sql.push_str(" FROM ");
-        sql.push_str(&self.table_name);
+        sql.push_str(&format!(" FROM {}", self.table_name));
         
         // JOIN clauses
         for join_clause in &self.join_clauses {
-            sql.push(' ');
-            sql.push_str(match join_clause.join_type {
-                JoinType::Inner => "INNER JOIN",
-                JoinType::Left => "LEFT JOIN",
-                JoinType::Right => "RIGHT JOIN",
-                JoinType::FullOuter => "FULL OUTER JOIN",
-                JoinType::Cross => "CROSS JOIN",
-            });
-            sql.push(' ');
-            sql.push_str(&join_clause.table);
-            
-            // Add ON conditions for non-CROSS joins
-            if !matches!(join_clause.join_type, JoinType::Cross) && !join_clause.on_conditions.is_empty() {
+            sql.push_str(&format!(" {} {}", join_clause.join_type, join_clause.table));
+            if !join_clause.on_conditions.is_empty() {
                 sql.push_str(" ON ");
-                
-                for (i, condition) in join_clause.on_conditions.iter().enumerate() {
-                    if i > 0 {
-                        match condition.connector {
-                            JoinConnector::And => sql.push_str(" AND "),
-                            JoinConnector::Or => sql.push_str(" OR "),
-                        }
-                    }
-                    
-                    sql.push_str(&condition.left_column);
-                    sql.push(' ');
-                    sql.push_str(condition.operator.as_str());
-                    sql.push(' ');
-                    sql.push_str(&condition.right_column);
-                }
+                let conditions: Vec<String> = join_clause.on_conditions.iter()
+                    .map(|condition| format!("{} {} {}", condition.left_column, condition.operator, condition.right_column))
+                    .collect();
+                sql.push_str(&conditions.join(" AND "));
             }
         }
         
         // WHERE clause
-        if !self.where_conditions.is_empty() {
+        if !self.where_conditions.is_empty() || !self.subquery_conditions.is_empty() {
             sql.push_str(" WHERE ");
+            let mut where_parts = Vec::new();
             
+            // Regular WHERE conditions
             for (i, condition) in self.where_conditions.iter().enumerate() {
-                if i > 0 {
+                let connector = if i == 0 { "" } else {
                     match condition.connector {
-                        WhereConnector::And => sql.push_str(" AND "),
-                        WhereConnector::Or => sql.push_str(" OR "),
+                        WhereConnector::And => " AND ",
+                        WhereConnector::Or => " OR ",
                     }
-                }
-                
-                sql.push_str(&condition.column);
-                sql.push(' ');
-                sql.push_str(condition.operator.as_str());
-                
-                // For array values, use IN syntax
-                if let Value::Array(_) = condition.value {
-                    sql.push_str(" (");
-                    // TODO: Handle parameter placeholders properly
-                    sql.push_str("?");
-                    sql.push(')');
-                } else {
-                    sql.push_str(" ?");
-                }
-            }
-        }
-        
-        // Add subquery conditions to WHERE clause
-        let has_regular_where = !self.where_conditions.is_empty();
-        if !self.subquery_conditions.is_empty() {
-            if !has_regular_where {
-                sql.push_str(" WHERE ");
+                };
+                where_parts.push(format!("{}{} {} ?", connector, condition.column, condition.operator));
             }
             
+            // Subquery conditions
             for (i, condition) in self.subquery_conditions.iter().enumerate() {
-                if has_regular_where || i > 0 {
+                let connector = if i == 0 && self.where_conditions.is_empty() { "" } else {
                     match condition.connector {
-                        WhereConnector::And => sql.push_str(" AND "),
-                        WhereConnector::Or => sql.push_str(" OR "),
+                        WhereConnector::And => " AND ",
+                        WhereConnector::Or => " OR ",
                     }
-                }
+                };
                 
-                match condition.operator {
-                    Operator::EXISTS => {
-                        sql.push_str("EXISTS ");
-                        sql.push_str(&condition.subquery.to_sql()?);
-                    }
-                    Operator::NOT_EXISTS => {
-                        sql.push_str("NOT EXISTS ");
-                        sql.push_str(&condition.subquery.to_sql()?);
-                    }
-                    _ => {
-                        sql.push_str(&condition.column);
-                        sql.push(' ');
-                        sql.push_str(condition.operator.as_str());
-                        sql.push(' ');
-                        sql.push_str(&condition.subquery.to_sql()?);
-                    }
-                }
+                let subquery_sql = condition.subquery.query.to_sql()?;
+                let condition_sql = match condition.operator {
+                    Operator::IN => format!("{}{} IN ({})", connector, condition.column, subquery_sql),
+                    Operator::NOT_IN => format!("{}{} NOT IN ({})", connector, condition.column, subquery_sql),
+                    Operator::EXISTS => format!("{}EXISTS ({})", connector, subquery_sql),
+                    Operator::NOT_EXISTS => format!("{}NOT EXISTS ({})", connector, subquery_sql),
+                    _ => return Err(crate::Error::sql_generation("Invalid subquery operator")),
+                };
+                where_parts.push(condition_sql);
             }
+            
+            sql.push_str(&where_parts.join(""));
         }
         
         // GROUP BY clause
-        if let Some(group_by) = &self.group_by_clause {
+        if let Some(ref group_by) = self.group_by_clause {
             sql.push_str(" GROUP BY ");
             sql.push_str(&group_by.columns.join(", "));
         }
@@ -953,7 +1192,6 @@ impl QueryBuilder for SelectBuilder {
         // HAVING clause
         if !self.having_conditions.is_empty() {
             sql.push_str(" HAVING ");
-            
             for (i, condition) in self.having_conditions.iter().enumerate() {
                 if i > 0 {
                     match condition.connector {
@@ -961,35 +1199,17 @@ impl QueryBuilder for SelectBuilder {
                         WhereConnector::Or => sql.push_str(" OR "),
                     }
                 }
-                
-                sql.push_str(&condition.column_or_function);
-                sql.push(' ');
-                sql.push_str(condition.operator.as_str());
-                
-                // For array values, use IN syntax
-                if let Value::Array(_) = condition.value {
-                    sql.push_str(" (");
-                    // TODO: Handle parameter placeholders properly
-                    sql.push_str("?");
-                    sql.push(')');
-                } else {
-                    sql.push_str(" ?");
-                }
+                sql.push_str(&format!("{} {} ?", condition.column_or_function, condition.operator));
             }
         }
         
         // ORDER BY clause
         if !self.order_by_clauses.is_empty() {
             sql.push_str(" ORDER BY ");
-            
-            for (i, order_clause) in self.order_by_clauses.iter().enumerate() {
-                if i > 0 {
-                    sql.push_str(", ");
-                }
-                sql.push_str(&order_clause.column);
-                sql.push(' ');
-                sql.push_str(&order_clause.direction.to_string());
-            }
+            let order_strings: Vec<String> = self.order_by_clauses.iter()
+                .map(|clause| format!("{} {}", clause.column, clause.direction))
+                .collect();
+            sql.push_str(&order_strings.join(", "));
         }
         
         // LIMIT clause
@@ -997,7 +1217,7 @@ impl QueryBuilder for SelectBuilder {
             sql.push_str(&format!(" LIMIT {}", limit));
         }
         
-        // OFFSET clause
+        // OFFSET clause  
         if let Some(offset) = self.offset_value {
             sql.push_str(&format!(" OFFSET {}", offset));
         }
@@ -1013,6 +1233,12 @@ impl QueryBuilder for SelectBuilder {
         self.clone()
     }
 }
+
+// SelectBuilderInitial deliberately does NOT implement QueryBuilder
+// This prevents calling to_sql(), parameters(), etc. at compile time
+
+// All query building methods are already implemented above in the original SelectBuilderInitial impl block
+
 
 /// Trait for types that can be converted to column lists
 pub trait IntoColumns {

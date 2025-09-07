@@ -111,7 +111,8 @@ fn main() {
         .where_(("age", op::GTE, 18))     // First condition
         .and_where(("status", "active"))  // Explicit AND (same as where_)
         .or_where(("role", "admin"))      // Explicit OR
-        .and_where(("verified", true));   // Back to AND
+        .and_where(("verified", true))    // Back to AND
+        .select(("id", "name"));          // Complete the query
     
     println!("8. Complex WHERE (AND/OR combinations):");
     println!("   SQL: {}", complex_query.to_sql().unwrap());
@@ -119,7 +120,9 @@ fn main() {
     
     // Deferred validation example
     println!("9. Deferred Validation:");
-    let invalid_query = from("users").where_(("age", "INVALID_OPERATOR", 18));
+    let invalid_query = from("users")
+        .where_(("age", "INVALID_OPERATOR", 18))
+        .select(("id", "name"));
     
     match invalid_query.to_sql() {
         Ok(sql) => println!("   Unexpected success: {}", sql),

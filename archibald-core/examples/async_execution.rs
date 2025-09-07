@@ -107,6 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n2. Fetch single user:");
     let user: User = from("users")
         .where_(("id", 1))
+        .select(("id", "name", "email", "age"))
         .fetch_one(&pool)
         .await?;
     println!("User: {} - {}", user.name, user.email);
@@ -114,6 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n3. Fetch optional user:");
     let maybe_user: Option<User> = from("users")
         .where_(("id", 999))
+        .select(("id", "name", "email", "age"))
         .fetch_optional(&pool)
         .await?;
     match maybe_user {
