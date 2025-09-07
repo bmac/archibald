@@ -383,6 +383,14 @@ all-types = ["uuid-support", "datetime-support", "decimal-support"]
    - Memory allocation optimization
    - Benchmark suite
 
+### Phase 6.5: Ergonomic Improvements (Future)
+1. **Derive Macros for Data Traits**
+   - `#[derive(IntoUpdateData)]` for UPDATE operations
+   - `#[derive(IntoInsertData)]` for INSERT operations  
+   - Support for field renaming: `#[archibald(rename = "db_column")]`
+   - Support for skipping fields: `#[archibald(skip)]`
+   - Integration with existing struct definitions
+
 ### Phase 7: Documentation and Ecosystem (Weeks 15-16)
 1. **Documentation**
    - API documentation with examples
@@ -693,6 +701,104 @@ match query.to_sql() {
 ```
 
 This architecture prioritizes developer experience while maintaining type safety and providing clear error handling.
+
+## Future Feature: Derive Macros for Data Operations
+
+**Problem**: Currently users must manually create `HashMap<String, Value>` for UPDATE/INSERT operations, which is verbose and error-prone:
+
+```rust
+// Current approach - verbose and repetitive
+let mut updates = HashMap::new();
+updates.insert("email".to_string(), user.email.into());
+updates.insert("age".to_string(), user.age.into());
+updates.insert("name".to_string(), user.name.into());
+
+update("users").set(updates).where_(("id", user.id)).execute(&pool).await?;
+```
+
+**Solution**: Derive macros that automatically implement data traits for user structs:
+
+```rust
+// Future approach - clean and type-safe
+#[derive(IntoUpdateData)]
+struct UserUpdate {
+    #[archibald(skip)]           // Don't include in updates
+    id: i32,
+    #[archibald(rename = "full_name")]  // Map to different column name
+    name: String,
+    email: String,
+    age: i32,
+}
+
+let user_update = UserUpdate {
+    id: 123,  // Skipped
+    name: "John Doe".to_string(),  // Maps to 'full_name' column
+    email: "john@example.com".to_string(),
+    age: 30,
+};
+
+// Much cleaner usage
+update("users").set(user_update).where_(("id", 123)).execute(&pool).await?;
+```
+
+**Implementation Details:**
+
+### IntoUpdateData Derive Macro
+```rust
+// Generated implementation would be:
+impl IntoUpdateData for UserUpdate {
+    fn into_update_data(self) -> Vec<(String, Value)> {
+        vec![
+            ("full_name".to_string(), self.name.into()),  // Renamed field
+            ("email".to_string(), self.email.into()),
+            ("age".to_string(), self.age.into()),
+            // id field skipped due to #[archibald(skip)]
+        ]
+    }
+}
+```
+
+### IntoInsertData Derive Macro
+```rust
+#[derive(IntoInsertData)]
+struct NewUser {
+    name: String,
+    email: String,
+    #[archibald(default)]  // Use database default
+    created_at: Option<DateTime<Utc>>,
+}
+
+// Usage:
+let new_user = NewUser {
+    name: "Jane".to_string(),
+    email: "jane@example.com".to_string(), 
+    created_at: None,  // Will use database default
+};
+
+insert("users").values(new_user).execute(&pool).await?;
+```
+
+**Macro Attributes:**
+- `#[archibald(skip)]` - Exclude field from data operations
+- `#[archibald(rename = "column_name")]` - Map to different database column  
+- `#[archibald(default)]` - Use database default for NULL/None values
+- `#[archibald(flatten)]` - Flatten nested struct fields (future)
+
+**Benefits:**
+- **Type Safety**: Field names and types checked at compile time
+- **Ergonomic**: Clean struct-based API instead of HashMap juggling
+- **Maintainable**: Changes to struct automatically update database operations
+- **Familiar**: Follows Rust ecosystem patterns (like serde derives)
+- **Optional**: Doesn't replace HashMap approach, just provides alternative
+
+**Why Not Serde?**
+While serde is excellent for serialization, `IntoUpdateData` has different requirements:
+- Different output format: `Vec<(String, Value)>` vs JSON/TOML/etc
+- Database-specific concerns: column renaming, NULL handling, field skipping
+- Integration with `archibald::Value` type system
+- SQL-specific attribute semantics
+
+This feature would be implemented in a future `archibald-derive` crate and would significantly improve the ergonomics of data operations while maintaining the flexibility of the current HashMap-based approach.
 
 ---
 
