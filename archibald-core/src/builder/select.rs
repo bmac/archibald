@@ -356,6 +356,31 @@ impl SelectBuilderInitial {
         self
     }
 
+    /// Add a FULL OUTER JOIN clause
+    pub fn full_outer_join(mut self, table: &str, left_column: &str, right_column: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Full,
+            table: table.to_string(),
+            on_conditions: vec![super::common::JoinCondition {
+                left_column: left_column.to_string(),
+                operator: crate::Operator::EQ,
+                right_column: right_column.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+
+    /// Add a CROSS JOIN clause
+    pub fn cross_join(mut self, table: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Cross,
+            table: table.to_string(),
+            on_conditions: Vec::new(), // CROSS JOIN has no ON conditions
+        });
+        self
+    }
+
     /// Add a GROUP BY clause
     pub fn group_by<C>(mut self, columns: C) -> Self
     where
@@ -531,6 +556,31 @@ impl SelectBuilderComplete {
                 right_column: right_column.to_string(),
                 connector: JoinConnector::And,
             }],
+        });
+        self
+    }
+
+    /// Add a FULL OUTER JOIN clause
+    pub fn full_outer_join(mut self, table: &str, left_column: &str, right_column: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Full,
+            table: table.to_string(),
+            on_conditions: vec![super::common::JoinCondition {
+                left_column: left_column.to_string(),
+                operator: crate::Operator::EQ,
+                right_column: right_column.to_string(),
+                connector: JoinConnector::And,
+            }],
+        });
+        self
+    }
+
+    /// Add a CROSS JOIN clause
+    pub fn cross_join(mut self, table: &str) -> Self {
+        self.join_clauses.push(JoinClause {
+            join_type: JoinType::Cross,
+            table: table.to_string(),
+            on_conditions: Vec::new(), // CROSS JOIN has no ON conditions
         });
         self
     }
@@ -914,5 +964,261 @@ mod tests {
             .having(("COUNT(*)", op::GT, 5));
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM users GROUP BY department HAVING COUNT(*) > ?");
+    }
+
+    #[test]
+    fn test_avg_function() {
+        let query = from("products")
+            .select(ColumnSelector::avg("price"));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT AVG(price) FROM products");
+    }
+
+    #[test]
+    fn test_min_function() {
+        let query = from("products")
+            .select(ColumnSelector::min("price"));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT MIN(price) FROM products");
+    }
+
+    #[test]
+    fn test_max_function() {
+        let query = from("products")
+            .select(ColumnSelector::max("price"));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT MAX(price) FROM products");
+    }
+
+    #[test]
+    fn test_sum_function() {
+        let query = from("orders")
+            .select(ColumnSelector::sum("total"));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT SUM(total) FROM orders");
+    }
+
+    #[test]
+    fn test_aggregation_with_alias() {
+        let query = from("orders")
+            .select(ColumnSelector::sum("total").as_alias("total_sales"));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT SUM(total) AS total_sales FROM orders");
+    }
+
+    #[test]
+    fn test_count_all() {
+        let query = from("users")
+            .select(ColumnSelector::count());
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT COUNT(*) FROM users");
+    }
+
+    #[test]
+    fn test_count_all_with_alias() {
+        let query = from("users")
+            .select(ColumnSelector::count_as("total_users"));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT COUNT(*) AS total_users FROM users");
+    }
+
+    #[test]
+    fn test_count_column() {
+        let query = from("users")
+            .select(ColumnSelector::count_column("email"));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT COUNT(email) FROM users");
+    }
+
+    #[test]
+    fn test_count_distinct() {
+        let query = from("orders")
+            .select(ColumnSelector::count_distinct("customer_id"));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT COUNT(DISTINCT(customer_id)) FROM orders");
+    }
+
+    #[test]
+    fn test_cross_join() {
+        let query = from("users")
+            .select("*")
+            .cross_join("categories");
+        
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users CROSS JOIN categories");
+    }
+
+    #[test]
+    fn test_full_outer_join() {
+        let query = from("users")
+            .select("*")
+            .full_outer_join("profiles", "users.id", "profiles.user_id");
+        
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users FULL OUTER JOIN profiles ON users.id = profiles.user_id");
+    }
+
+    #[test]
+    fn test_aggregation_with_group_by() {
+        let query = from("orders")
+            .select(vec![
+                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::count().as_alias("count"),
+                ColumnSelector::avg("total").as_alias("avg_total")
+            ])
+            .group_by("status");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT status, COUNT(*) AS count, AVG(total) AS avg_total FROM orders GROUP BY status");
+    }
+    
+    #[test]
+    fn test_aggregation_with_joins() {
+        let query = from("users")
+            .select(vec![
+                ColumnSelector::Column("users.name".to_string()),
+                ColumnSelector::count().as_alias("order_count")
+            ])
+            .left_join("orders", "users.id", "orders.user_id")
+            .group_by("users.name");
+            
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT users.name, COUNT(*) AS order_count FROM users LEFT JOIN orders ON users.id = orders.user_id GROUP BY users.name");
+    }
+
+    #[test]
+    fn test_complex_aggregation_query() {
+        let query = from("orders")
+            .select(vec![
+                ColumnSelector::Column("customer_id".to_string()),
+                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::count().as_alias("order_count"),
+                ColumnSelector::sum("total").as_alias("total_sales"),
+                ColumnSelector::avg("total").as_alias("avg_order_value"),
+                ColumnSelector::min("total").as_alias("min_order"),
+                ColumnSelector::max("total").as_alias("max_order")
+            ])
+            .where_(("status", "completed"))
+            .group_by(("customer_id", "status"))
+            .order_by_asc("customer_id")
+            .order_by_desc("total_sales")
+            .limit(100);
+            
+        let sql = query.to_sql().unwrap();
+        let expected = "SELECT customer_id, status, COUNT(*) AS order_count, SUM(total) AS total_sales, AVG(total) AS avg_order_value, MIN(total) AS min_order, MAX(total) AS max_order FROM orders WHERE status = ? GROUP BY customer_id, status ORDER BY customer_id ASC, total_sales DESC LIMIT 100";
+        assert_eq!(sql, expected);
+    }
+
+    #[test]
+    fn test_complex_distinct_query() {
+        let query = from("users")
+            .inner_join("user_roles", "users.id", "user_roles.user_id")
+            .inner_join("roles", "user_roles.role_id", "roles.id")
+            .select(("users.department", "roles.name"))
+            .distinct()
+            .where_(("users.active", true))
+            .and_where(("roles.active", true))
+            .order_by_asc("users.department")
+            .order_by_asc("roles.name")
+            .limit(20);
+            
+        let sql = query.to_sql().unwrap();
+        let expected = "SELECT DISTINCT users.department, roles.name FROM users INNER JOIN user_roles ON users.id = user_roles.user_id INNER JOIN roles ON user_roles.role_id = roles.id WHERE users.active = ? AND roles.active = ? ORDER BY users.department ASC, roles.name ASC LIMIT 20";
+        assert_eq!(sql, expected);
+    }
+
+    #[test]
+    fn test_and_where_methods() {
+        // Test that and_where works the same as where_
+        let query1 = from("users")
+            .select("*")
+            .where_(("age", op::GT, 18))
+            .where_(("status", "active"));
+
+        let query2 = from("users")
+            .select("*")
+            .where_(("age", op::GT, 18))
+            .and_where(("status", "active"));
+
+        assert_eq!(query1.to_sql().unwrap(), query2.to_sql().unwrap());
+    }
+
+    #[test]
+    fn test_complex_where_combinations() {
+        let query = from("users")
+            .select("*")
+            .where_(("age", op::GTE, 18))     // First condition (AND by default)
+            .and_where(("status", "active"))  // Explicit AND
+            .or_where(("role", "admin"))      // OR condition
+            .and_where(("verified", true));   // Back to AND
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT * FROM users WHERE age >= ? AND status = ? OR role = ? AND verified = ?");
+    }
+
+    #[test]
+    fn test_distinct_all_columns() {
+        let query = from("users")
+            .select("*")
+            .distinct();
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT * FROM users");
+    }
+
+    #[test]
+    fn test_complex_query_with_joins_group_order() {
+        let query = from("users")
+            .select(("users.name", "orders.status"))
+            .inner_join("orders", "users.id", "orders.user_id")
+            .where_(("users.active", true))
+            .group_by(("users.name", "orders.status"))
+            .order_by_asc("users.name")
+            .order_by_desc("orders.status")
+            .limit(10);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT users.name, orders.status FROM users INNER JOIN orders ON users.id = orders.user_id WHERE users.active = ? GROUP BY users.name, orders.status ORDER BY users.name ASC, orders.status DESC LIMIT 10");
+    }
+
+    #[test]
+    fn test_distinct_multiple_columns() {
+        let query = from("users")
+            .select(("status", "role"))
+            .distinct();
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT status, role FROM users");
+    }
+
+    #[test]
+    fn test_distinct_with_group_by() {
+        let query = from("orders")
+            .group_by("customer_id")
+            .select("customer_id")
+            .distinct();
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT customer_id FROM orders GROUP BY customer_id");
+    }
+
+    #[test]
+    fn test_distinct_with_join() {
+        let query = from("users")
+            .select("users.role")
+            .distinct()
+            .inner_join("departments", "users.dept_id", "departments.id");
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT DISTINCT users.role FROM users INNER JOIN departments ON users.dept_id = departments.id");
     }
 }
