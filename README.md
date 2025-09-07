@@ -2,21 +2,19 @@
 
 A type-safe, async SQL query builder for Rust, inspired by knex.js.
 
-Named after [Archibald Query](https://en.wikipedia.org/wiki/Archibald_Query), the inventor of fluff - because every great query deserves a bit of fluff around the edges.
+Named after [Archibald Query](https://en.wikipedia.org/wiki/Archibald_Query), the inventor of fluff, because your database deserves queries with character.
 
 [![Crates.io](https://img.shields.io/crates/v/archibald.svg)](https://crates.io/crates/archibald)
 [![Documentation](https://docs.rs/archibald/badge.svg)](https://docs.rs/archibald)
 
 ## ✨ Features
 
-- **🛡️ Type-safe**: Leverages Rust's type system to prevent SQL injection and runtime errors
-- **⚡ Async-first**: Built for `tokio` with async/await throughout
 - **🔗 Fluent API**: Clean, chainable query builder inspired by knex.js
+- **⚡ Async-first**: Built for `tokio` with async/await throughout
 - **🏦 Transactions**: Full transaction support with savepoints and isolation levels
+- **📊 Rich Queries**: JOINs, aggregations, GROUP BY, HAVING, ORDER BY, DISTINCT
 - **🔍 Subqueries**: IN, NOT IN, EXISTS, NOT EXISTS, and SELECT subqueries
 - **🎯 Parameter Binding**: Automatic SQL injection prevention
-- **🔧 Deferred Validation**: Build queries fluently, validate at SQL generation
-- **📊 Rich Queries**: JOINs, aggregations, GROUP BY, HAVING, ORDER BY, DISTINCT
 - **🗄️ Multi-Database**: PostgreSQL support (MySQL, SQLite planned)
 
 ## 🛡️ Compile-Time Safety for Dangerous Operations
