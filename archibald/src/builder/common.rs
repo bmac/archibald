@@ -184,8 +184,7 @@ impl ColumnSelector {
             } => {
                 *alias_field = Some(alias.to_string());
                 self
-            }
-            // SubqueryColumn handled in select.rs
+            } // SubqueryColumn handled in select.rs
         }
     }
 

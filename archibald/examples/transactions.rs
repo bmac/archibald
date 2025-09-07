@@ -32,11 +32,7 @@ impl ConnectionPool for MockPool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        sql: &str,
-        _params: &[archibald::Value],
-    ) -> archibald::Result<u64> {
+    async fn execute(&self, sql: &str, _params: &[archibald::Value]) -> archibald::Result<u64> {
         println!("   EXECUTE: {}", sql);
         Ok(1) // Simulate 1 affected row
     }
@@ -53,11 +49,7 @@ impl ConnectionPool for MockPool {
         Ok(Vec::new())
     }
 
-    async fn fetch_one<T>(
-        &self,
-        sql: &str,
-        _params: &[archibald::Value],
-    ) -> archibald::Result<T>
+    async fn fetch_one<T>(&self, sql: &str, _params: &[archibald::Value]) -> archibald::Result<T>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {
@@ -91,11 +83,7 @@ impl ConnectionPool for MockPool {
 struct MockTransaction;
 
 impl Transaction for MockTransaction {
-    async fn execute(
-        &mut self,
-        sql: &str,
-        _params: &[archibald::Value],
-    ) -> archibald::Result<u64> {
+    async fn execute(&mut self, sql: &str, _params: &[archibald::Value]) -> archibald::Result<u64> {
         println!("   TXN EXECUTE: {}", sql);
         Ok(1)
     }
@@ -320,9 +308,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\\n=== All transaction examples completed! ===");
-    println!(
-        "\\nIn production, replace MockPool with archibald::executor::postgres::PostgresPool"
-    );
+    println!("\\nIn production, replace MockPool with archibald::executor::postgres::PostgresPool");
 
     Ok(())
 }

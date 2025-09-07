@@ -1057,7 +1057,7 @@ pub mod sqlite {
             isolation: IsolationLevel,
         ) -> Result<Self::Transaction> {
             let mut txn = self.inner.begin().await?;
-            
+
             // SQLite supports fewer isolation levels than PostgreSQL
             // Map to SQLite pragma settings
             let pragma = match isolation {
@@ -1066,7 +1066,7 @@ pub mod sqlite {
                 IsolationLevel::RepeatableRead => "PRAGMA read_uncommitted = false", // Best we can do
                 IsolationLevel::Serializable => "PRAGMA read_uncommitted = false", // SQLite default is serializable
             };
-            
+
             sqlx::query(pragma).execute(&mut *txn).await?;
             Ok(SqliteTransaction { inner: txn })
         }
@@ -1094,8 +1094,10 @@ pub mod sqlite {
                 }
                 Value::Array(arr) => {
                     // SQLite doesn't have native array support, serialize as JSON string
-                    let json_array = serde_json::Value::Array(arr.iter().map(value_to_json).collect());
-                    let json_str = serde_json::to_string(&json_array).unwrap_or_else(|_| "[]".to_string());
+                    let json_array =
+                        serde_json::Value::Array(arr.iter().map(value_to_json).collect());
+                    let json_str =
+                        serde_json::to_string(&json_array).unwrap_or_else(|_| "[]".to_string());
                     query.bind(json_str)
                 }
                 Value::SubqueryPlaceholder => {
@@ -1222,28 +1224,35 @@ pub mod sqlite {
                 _ => panic!("Expected JSON value"),
             }
 
-            let json_arr = serde_json::Value::Array(array_value.as_array().unwrap().iter().map(value_to_json).collect());
+            let json_arr = serde_json::Value::Array(
+                array_value
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(value_to_json)
+                    .collect(),
+            );
             let serialized_array = serde_json::to_string(&json_arr).unwrap();
             assert!(serialized_array.contains("item1"));
             assert!(serialized_array.contains("42"));
             assert!(serialized_array.contains("true"));
         }
 
-        #[test] 
+        #[test]
         fn test_isolation_level_pragmas() {
             // Test that isolation levels map to appropriate SQLite pragmas
             // SQLite has limited isolation level support compared to PostgreSQL
-            
+
             // These are the pragmas we expect for each isolation level
             let read_uncommitted = "PRAGMA read_uncommitted = true";
             let read_committed = "PRAGMA read_uncommitted = false";
             let repeatable_read = "PRAGMA read_uncommitted = false";
             let serializable = "PRAGMA read_uncommitted = false";
-            
+
             // Verify our mapping logic
             assert!(read_uncommitted.contains("true"));
             assert!(read_committed.contains("false"));
-            assert!(repeatable_read.contains("false"));  
+            assert!(repeatable_read.contains("false"));
             assert!(serializable.contains("false"));
         }
     }
@@ -1416,9 +1425,7 @@ mod tests {
             crate::Value::String("Updated".to_string()),
         );
 
-        let query = crate::update("users")
-            .set(updates)
-            .where_(("id", 1));
+        let query = crate::update("users").set(updates).where_(("id", 1));
 
         let affected = query.execute(&pool).await.unwrap();
         assert_eq!(affected, 1);

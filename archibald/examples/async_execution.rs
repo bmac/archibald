@@ -29,11 +29,7 @@ impl ConnectionPool for MockPool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        sql: &str,
-        _params: &[archibald::Value],
-    ) -> archibald::Result<u64> {
+    async fn execute(&self, sql: &str, _params: &[archibald::Value]) -> archibald::Result<u64> {
         println!("EXECUTE: {}", sql);
         Ok(1) // Simulate 1 affected row
     }
@@ -62,11 +58,7 @@ impl ConnectionPool for MockPool {
         }
     }
 
-    async fn fetch_one<T>(
-        &self,
-        sql: &str,
-        _params: &[archibald::Value],
-    ) -> archibald::Result<T>
+    async fn fetch_one<T>(&self, sql: &str, _params: &[archibald::Value]) -> archibald::Result<T>
     where
         T: serde::de::DeserializeOwned + Send + Unpin,
     {

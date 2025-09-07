@@ -279,7 +279,7 @@ mod tests {
     fn test_update_with_set_but_no_where_fails() {
         let mut data = HashMap::new();
         data.insert("name".to_string(), "Jane".into());
-        
+
         let query = update("users").set(data);
         let result = query.to_sql();
         assert!(result.is_err());
@@ -314,7 +314,7 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("SET clause"));
 
-        // Can't call to_sql() on UpdateBuilderWithSet - missing WHERE  
+        // Can't call to_sql() on UpdateBuilderWithSet - missing WHERE
         let mut data = HashMap::new();
         data.insert("name".to_string(), "Jane".into());
         let set_builder = update("users").set(data);

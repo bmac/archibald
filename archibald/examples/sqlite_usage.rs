@@ -72,10 +72,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   Parameters: {:?}\n", update_query.parameters());
 
         // DELETE
-        let delete_query =
-            delete("users")
-                .where_(("age", op::LT, 13))
-                .or_where(("last_login", op::LT, "2020-01-01"));
+        let delete_query = delete("users").where_(("age", op::LT, 13)).or_where((
+            "last_login",
+            op::LT,
+            "2020-01-01",
+        ));
 
         println!("5. DELETE:");
         println!("   SQL: {}", delete_query.to_sql()?);
@@ -104,7 +105,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Example with JSON data (SQLite stores as TEXT)
         let mut json_data = HashMap::new();
         json_data.insert("name".to_string(), "Jane Doe".into());
-        json_data.insert("metadata".to_string(), serde_json::json!({"role": "admin", "permissions": ["read", "write"]}).into());
+        json_data.insert(
+            "metadata".to_string(),
+            serde_json::json!({"role": "admin", "permissions": ["read", "write"]}).into(),
+        );
 
         let insert_json_query = insert("users").values(json_data);
         println!("8. INSERT with JSON (SQLite stores as TEXT):");
