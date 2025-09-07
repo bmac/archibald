@@ -1,9 +1,11 @@
-# Archibald 🏗️
+# Archibald ☁️
 
 A type-safe, async SQL query builder for Rust, inspired by knex.js.
 
-[![Crates.io](https://img.shields.io/crates/v/archibald-core.svg)](https://crates.io/crates/archibald-core)
-[![Documentation](https://docs.rs/archibald-core/badge.svg)](https://docs.rs/archibald-core)
+Named after [Archibald Query](https://en.wikipedia.org/wiki/Archibald_Query), the inventor of fluff - because every great query deserves a bit of fluff around the edges.
+
+[![Crates.io](https://img.shields.io/crates/v/archibald.svg)](https://crates.io/crates/archibald)
+[![Documentation](https://docs.rs/archibald/badge.svg)](https://docs.rs/archibald)
 
 ## ✨ Features
 
@@ -17,13 +19,39 @@ A type-safe, async SQL query builder for Rust, inspired by knex.js.
 - **📊 Rich Queries**: JOINs, aggregations, GROUP BY, HAVING, ORDER BY, DISTINCT
 - **🗄️ Multi-Database**: PostgreSQL support (MySQL, SQLite planned)
 
+## 🛡️ Compile-Time Safety for Dangerous Operations
+
+Archibald is **strongly opinionated** about naked updates and deletes. UPDATE and DELETE operations require WHERE clauses at **compile time**:
+
+```rust
+// ❌ Won't compile - missing WHERE clause
+update("users").set(data).execute(&pool).await?;  // Compile error!
+
+// ❌ Won't compile - missing WHERE clause
+delete("users").execute(&pool).await?;  // Compile error!
+
+// ✅ Safe - both SET and WHERE required
+update("users")
+    .set(data)
+    .where_(("id", 1))
+    .execute(&pool).await?;  // ✅ Compiles!
+
+// ✅ Explicit mass updates allowed - if you really mean it
+update("users")
+    .set(data)
+    .where_((1, 1))  // Explicit "update everything" signal
+    .execute(&pool).await?;
+```
+
+**Why this matters:** Many SQL data disasters come from missing WHERE clauses. Archibald makes it impossible to forget them.
+
 ## 🚀 Quick Start
 
 Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-archibald-core = { version = "0.1", features = ["postgres"] }
+archibald = { version = "0.1", features = ["postgres"] }
 sqlx = { version = "0.7", features = ["runtime-tokio", "postgres"] }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -32,8 +60,8 @@ serde = { version = "1.0", features = ["derive"] }
 ## 📖 Basic Usage
 
 ```rust
-use archibald_core::{from, update, delete, insert, op, transaction};
-use archibald_core::executor::postgres::PostgresPool;
+use archibald::{from, update, delete, insert, op, transaction};
+use archibald::executor::postgres::PostgresPool;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -127,8 +155,8 @@ user_data.insert("name".to_string(), "Alice".into());
 user_data.insert("email".to_string(), "alice@example.com".into());
 user_data.insert("age".to_string(), 25.into());
 
-let affected = InsertBuilder::new("users")
-    .insert(user_data)
+let affected = insert("users")
+    .values(user_data)
     .execute(&pool)
     .await?;
 
@@ -163,13 +191,13 @@ let affected = delete("users")
 Archibald provides full transaction support with automatic commit/rollback:
 
 ```rust
-use archibald_core::transaction;
+use archibald::transaction;
 
 // Simple transaction with automatic commit/rollback
 let result = transaction(&pool, |txn| async move {
     // Insert user
-    let user_id = InsertBuilder::new("users")
-        .insert(user_data)
+    let user_id = insert("users")
+        .values(user_data)
         .execute_tx(txn)
         .await? as i32;
     
@@ -178,8 +206,8 @@ let result = transaction(&pool, |txn| async move {
     profile_data.insert("user_id".to_string(), user_id.into());
     profile_data.insert("bio".to_string(), "Hello world!".into());
     
-    InsertBuilder::new("user_profiles")
-        .insert(profile_data)
+    insert("user_profiles")
+        .values(profile_data)
         .execute_tx(txn)
         .await?;
         
@@ -211,7 +239,7 @@ match risky_operation(&mut txn).await {
 
 ### Transaction isolation levels
 ```rust
-use archibald_core::IsolationLevel;
+use archibald::IsolationLevel;
 
 let txn = pool.begin_transaction_with_isolation(IsolationLevel::Serializable).await?;
 // ... use transaction
@@ -252,13 +280,13 @@ match query.to_sql() {
 }
 ```
 
-## 🛡️ Type Safety & SQL Injection Prevention
+## 🛡️ Parameter Binding & Safety
 
-Archibald prevents SQL injection through:
+Archibald provides safety through:
 
 1. **Automatic parameter binding** - All values are parameterized
-2. **Type-safe operators** - Only valid operators compile
-3. **Validated SQL generation** - Invalid queries fail at build/runtime, not in database
+2. **Compile Time Where clauses** - UPDATE / DELETE statements require where clauses at compile time
+3. **Validated SQL generation** - Invalid queries fail at runtime, not in database
 
 ```rust
 // ✅ Safe - parameters are automatically bound
@@ -282,8 +310,8 @@ let users = from("users")
 
 ## 📚 Documentation
 
-- [API Documentation](https://docs.rs/archibald-core)
-- [Examples](./archibald-core/examples/)
+- [API Documentation](https://docs.rs/archibald)
+- [Examples](./archibald/examples/)
 - [Migration from knex.js](./MIGRATION.md) *(coming soon)*
 
 ## 🚧 Roadmap
@@ -299,13 +327,9 @@ let users = from("users")
 - [ ] Compile-time schema validation
 - [ ] Query optimization and caching
 
-## 🤝 Contributing
-
-Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
 ## 📄 License
 
-Licensed under the ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+Licensed under the [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
 
 ## 🙏 Acknowledgments
 
