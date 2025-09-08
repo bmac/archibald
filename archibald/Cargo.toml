@@ -3,8 +3,8 @@ name = "archibald"
 version = "0.1.0"
 edition = "2021"
 description = "A type-safe SQL query builder for Rust"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/your-username/archibald"
+license = "MIT"
+repository = "https://github.com/bmac/archibald"
 
 [dependencies]
 # Core runtime
