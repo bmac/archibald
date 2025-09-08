@@ -30,7 +30,6 @@ pub enum Value {
 }
 
 impl Value {
-    /// Check if the value is null
     pub fn is_null(&self) -> bool {
         matches!(self, Value::Null)
     }

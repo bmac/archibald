@@ -200,7 +200,6 @@ pub trait ExecutableModification: QueryBuilder {
         Tx: Transaction;
 }
 
-// Implementation for SelectBuilder
 impl<T> ExecutableQuery<T> for crate::builder::select::SelectBuilderComplete
 where
     T: DeserializeOwned + Send + Unpin,
@@ -260,7 +259,6 @@ where
     }
 }
 
-// Implementation for InsertBuilder
 impl ExecutableModification for crate::builder::InsertBuilderComplete {
     async fn execute<P>(self, pool: &P) -> Result<u64>
     where
@@ -281,7 +279,6 @@ impl ExecutableModification for crate::builder::InsertBuilderComplete {
     }
 }
 
-// Implementation for UpdateBuilderComplete
 impl ExecutableModification for crate::builder::UpdateBuilderComplete {
     async fn execute<P>(self, pool: &P) -> Result<u64>
     where
@@ -302,7 +299,6 @@ impl ExecutableModification for crate::builder::UpdateBuilderComplete {
     }
 }
 
-// Implementation for DeleteBuilder
 impl ExecutableModification for crate::builder::DeleteBuilderComplete {
     async fn execute<P>(self, pool: &P) -> Result<u64>
     where
@@ -572,23 +568,80 @@ pub mod postgres {
         }
     }
 
-    fn row_to_json_value(_row: &sqlx::postgres::PgRow) -> Result<serde_json::Value> {
-        // This is a placeholder - in reality we'd need to convert SQLx row to JSON
-        // For production, we'd iterate through columns and extract values
-        // For now, return empty object for compilation
-        Ok(serde_json::Value::Object(serde_json::Map::new()))
+    fn row_to_json_value(row: &sqlx::postgres::PgRow) -> Result<serde_json::Value> {
+        use sqlx::{Column, Row, TypeInfo, ValueRef};
+        use serde_json::{Map, Value as JsonValue};
+        
+        let mut object = Map::new();
+        
+        for (i, column) in row.columns().iter().enumerate() {
+            let column_name = column.name().to_string();
+            let raw_value = row.try_get_raw(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+            
+            // Handle NULL values
+            if raw_value.is_null() {
+                object.insert(column_name, JsonValue::Null);
+                continue;
+            }
+            
+            // Convert based on PostgreSQL type
+            let type_info = column.type_info();
+            let json_value = match type_info.name() {
+                "BOOL" => {
+                    let val: bool = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    JsonValue::Bool(val)
+                }
+                "INT2" | "INT4" => {
+                    let val: i32 = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    JsonValue::Number(serde_json::Number::from(val))
+                }
+                "INT8" => {
+                    let val: i64 = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    JsonValue::Number(serde_json::Number::from(val))
+                }
+                "FLOAT4" => {
+                    let val: f32 = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    JsonValue::Number(serde_json::Number::from_f64(val as f64).unwrap_or_else(|| serde_json::Number::from(0)))
+                }
+                "FLOAT8" => {
+                    let val: f64 = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    JsonValue::Number(serde_json::Number::from_f64(val).unwrap_or_else(|| serde_json::Number::from(0)))
+                }
+                "TEXT" | "VARCHAR" | "CHAR" => {
+                    let val: String = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    JsonValue::String(val)
+                }
+                "BYTEA" => {
+                    let val: Vec<u8> = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    // Convert bytes to array of numbers for JSON representation
+                    JsonValue::Array(val.into_iter().map(|b| JsonValue::Number(serde_json::Number::from(b))).collect())
+                }
+                "JSON" | "JSONB" => {
+                    let val: serde_json::Value = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    val
+                }
+                // Add more types as needed
+                _ => {
+                    // Fallback: try to get as string
+                    match row.try_get::<String, _>(i) {
+                        Ok(val) => JsonValue::String(val),
+                        Err(_) => {
+                            // If all else fails, represent as string of the raw value
+                            JsonValue::String(format!("Unsupported type: {}", type_info.name()))
+                        }
+                    }
+                }
+            };
+            
+            object.insert(column_name, json_value);
+        }
+        
+        Ok(JsonValue::Object(object))
     }
 
     #[cfg(test)]
     mod postgres_tests {
         use super::*;
-
-        #[test]
-        fn test_postgres_pool_creation() {
-            // Test that PostgresPool can be created from PgPool
-            // This is mainly a compilation test since we can't easily create a real PgPool in tests
-            assert!(true); // Placeholder test
-        }
 
         #[test]
         fn test_value_to_json_conversion() {
@@ -889,7 +942,6 @@ pub mod sqlite {
             Ok(Self { inner: pool })
         }
 
-        /// Create from an existing SqlitePool
         pub fn from_pool(pool: SqlxSqlitePool) -> Self {
             Self { inner: pool }
         }
@@ -1135,11 +1187,79 @@ pub mod sqlite {
         }
     }
 
-    fn row_to_json_value(_row: &sqlx::sqlite::SqliteRow) -> Result<serde_json::Value> {
-        // This is a placeholder - in reality we'd need to convert SQLx row to JSON
-        // For production, we'd iterate through columns and extract values
-        // For now, return empty object for compilation
-        Ok(serde_json::Value::Object(serde_json::Map::new()))
+    fn row_to_json_value(row: &sqlx::sqlite::SqliteRow) -> Result<serde_json::Value> {
+        use sqlx::{Column, Row, TypeInfo, ValueRef};
+        use serde_json::{Map, Value as JsonValue};
+        
+        let mut object = Map::new();
+        
+        for (i, column) in row.columns().iter().enumerate() {
+            let column_name = column.name().to_string();
+            let raw_value = row.try_get_raw(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+            
+            // Handle NULL values
+            if raw_value.is_null() {
+                object.insert(column_name, JsonValue::Null);
+                continue;
+            }
+            
+            // SQLite has a simpler type system than PostgreSQL
+            let type_info = column.type_info();
+            let json_value = match type_info.name() {
+                "BOOLEAN" => {
+                    let val: bool = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    JsonValue::Bool(val)
+                }
+                "INTEGER" => {
+                    // SQLite INTEGER can be i32 or i64, try both
+                    if let Ok(val) = row.try_get::<i32, _>(i) {
+                        JsonValue::Number(serde_json::Number::from(val))
+                    } else if let Ok(val) = row.try_get::<i64, _>(i) {
+                        JsonValue::Number(serde_json::Number::from(val))
+                    } else {
+                        JsonValue::Null
+                    }
+                }
+                "REAL" => {
+                    let val: f64 = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    JsonValue::Number(serde_json::Number::from_f64(val).unwrap_or_else(|| serde_json::Number::from(0)))
+                }
+                "TEXT" => {
+                    let val: String = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    // SQLite stores JSON as TEXT, so try to parse it
+                    if let Ok(parsed_json) = serde_json::from_str::<JsonValue>(&val) {
+                        // If it parses as valid JSON, use the parsed value
+                        parsed_json
+                    } else {
+                        // Otherwise, treat as plain string
+                        JsonValue::String(val)
+                    }
+                }
+                "BLOB" => {
+                    let val: Vec<u8> = row.try_get(i).map_err(|e| crate::Error::sql_generation(e.to_string()))?;
+                    // Convert bytes to array of numbers for JSON representation
+                    JsonValue::Array(val.into_iter().map(|b| JsonValue::Number(serde_json::Number::from(b))).collect())
+                }
+                _ => {
+                    // SQLite fallback: try to get as string first, then other types
+                    if let Ok(val) = row.try_get::<String, _>(i) {
+                        JsonValue::String(val)
+                    } else if let Ok(val) = row.try_get::<i64, _>(i) {
+                        JsonValue::Number(serde_json::Number::from(val))
+                    } else if let Ok(val) = row.try_get::<f64, _>(i) {
+                        JsonValue::Number(serde_json::Number::from_f64(val).unwrap_or_else(|| serde_json::Number::from(0)))
+                    } else if let Ok(val) = row.try_get::<bool, _>(i) {
+                        JsonValue::Bool(val)
+                    } else {
+                        JsonValue::String(format!("Unsupported type: {}", type_info.name()))
+                    }
+                }
+            };
+            
+            object.insert(column_name, json_value);
+        }
+        
+        Ok(JsonValue::Object(object))
     }
 
     #[cfg(test)]
@@ -1249,7 +1369,6 @@ pub mod sqlite {
             let repeatable_read = "PRAGMA read_uncommitted = false";
             let serializable = "PRAGMA read_uncommitted = false";
 
-            // Verify our mapping logic
             assert!(read_uncommitted.contains("true"));
             assert!(read_committed.contains("false"));
             assert!(repeatable_read.contains("false"));

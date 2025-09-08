@@ -43,7 +43,6 @@ impl Operator {
         Operator::Known(op)
     }
 
-    /// Get the string representation of the operator
     pub fn as_str(&self) -> &str {
         match self {
             Operator::Known(op) => op,
@@ -73,7 +72,6 @@ impl Display for Operator {
     }
 }
 
-/// Trait for types that can be converted to SQL operators
 pub trait IntoOperator {
     fn into_operator(self) -> Operator;
 }
@@ -165,7 +163,6 @@ mod tests {
         let invalid_op = "INVALID".into_operator();
         assert_eq!(invalid_op, Operator::Unknown("INVALID".to_string()));
 
-        // Test that validation fails
         assert!(invalid_op.validate().is_err());
     }
 

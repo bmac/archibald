@@ -10,7 +10,7 @@ fn main() {
         .select(("id", "name", "email"))
         .where_(("age", op::GT, 18)) // Using op constants
         .where_(("status", "active")) // Defaults to EQ
-        .where_(("city", "LIKE", "%York%")) // Using string operators
+        .and_where(("city", "LIKE", "%York%")) // Using string operators
         .limit(10)
         .offset(5);
 
@@ -24,7 +24,7 @@ fn main() {
         from("orders")
             .select("user_id")
             .where_(("status", "completed"))
-            .where_(("created_at", op::GT, "2024-01-01")),
+            .and_where(("created_at", op::GT, "2024-01-01")),
     );
 
     println!("2. Subquery (WHERE IN):");
@@ -34,8 +34,8 @@ fn main() {
     let subquery_exists = from("users").select(("id", "name", "email")).where_exists(
         from("posts")
             .select("1")
-            .where_(("posts.author_id", "users.id"))
-            .where_(("posts.published", true)),
+            .and_where(("posts.author_id", "users.id"))
+            .and_where(("posts.published", true)),
     );
 
     println!("   SQL: {}", subquery_exists.to_sql().unwrap());
