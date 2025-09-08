@@ -347,20 +347,26 @@ pub trait IntoColumnSelectors {
 
 impl IntoColumnSelectors for &str {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
-        vec![crate::ColumnSelector::Column(self.to_string())]
+        vec![crate::ColumnSelector::Column {
+            name: self.to_string(),
+            alias: None,
+        }]
     }
 }
 
 impl IntoColumnSelectors for String {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
-        vec![crate::ColumnSelector::Column(self)]
+        vec![crate::ColumnSelector::Column {
+            name: self,
+            alias: None,
+        }]
     }
 }
 
 impl IntoColumnSelectors for Vec<String> {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
         self.into_iter()
-            .map(|s| crate::ColumnSelector::Column(s))
+            .map(|s| crate::ColumnSelector::Column { name: s, alias: None })
             .collect()
     }
 }
@@ -368,7 +374,7 @@ impl IntoColumnSelectors for Vec<String> {
 impl IntoColumnSelectors for Vec<&str> {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
         self.into_iter()
-            .map(|s| crate::ColumnSelector::Column(s.to_string()))
+            .map(|s| crate::ColumnSelector::Column { name: s.to_string(), alias: None })
             .collect()
     }
 }
@@ -389,8 +395,8 @@ impl IntoColumnSelectors for Vec<crate::ColumnSelector> {
 impl IntoColumnSelectors for (&str, &str) {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
         vec![
-            crate::ColumnSelector::Column(self.0.to_string()),
-            crate::ColumnSelector::Column(self.1.to_string()),
+            crate::ColumnSelector::Column { name: self.0.to_string(), alias: None },
+            crate::ColumnSelector::Column { name: self.1.to_string(), alias: None },
         ]
     }
 }
@@ -398,9 +404,9 @@ impl IntoColumnSelectors for (&str, &str) {
 impl IntoColumnSelectors for (&str, &str, &str) {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
         vec![
-            crate::ColumnSelector::Column(self.0.to_string()),
-            crate::ColumnSelector::Column(self.1.to_string()),
-            crate::ColumnSelector::Column(self.2.to_string()),
+            crate::ColumnSelector::Column { name: self.0.to_string(), alias: None },
+            crate::ColumnSelector::Column { name: self.1.to_string(), alias: None },
+            crate::ColumnSelector::Column { name: self.2.to_string(), alias: None },
         ]
     }
 }
@@ -408,10 +414,10 @@ impl IntoColumnSelectors for (&str, &str, &str) {
 impl IntoColumnSelectors for (&str, &str, &str, &str) {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
         vec![
-            crate::ColumnSelector::Column(self.0.to_string()),
-            crate::ColumnSelector::Column(self.1.to_string()),
-            crate::ColumnSelector::Column(self.2.to_string()),
-            crate::ColumnSelector::Column(self.3.to_string()),
+            crate::ColumnSelector::Column { name: self.0.to_string(), alias: None },
+            crate::ColumnSelector::Column { name: self.1.to_string(), alias: None },
+            crate::ColumnSelector::Column { name: self.2.to_string(), alias: None },
+            crate::ColumnSelector::Column { name: self.3.to_string(), alias: None },
         ]
     }
 }
@@ -419,11 +425,11 @@ impl IntoColumnSelectors for (&str, &str, &str, &str) {
 impl IntoColumnSelectors for (&str, &str, &str, &str, &str) {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
         vec![
-            crate::ColumnSelector::Column(self.0.to_string()),
-            crate::ColumnSelector::Column(self.1.to_string()),
-            crate::ColumnSelector::Column(self.2.to_string()),
-            crate::ColumnSelector::Column(self.3.to_string()),
-            crate::ColumnSelector::Column(self.4.to_string()),
+            crate::ColumnSelector::Column { name: self.0.to_string(), alias: None },
+            crate::ColumnSelector::Column { name: self.1.to_string(), alias: None },
+            crate::ColumnSelector::Column { name: self.2.to_string(), alias: None },
+            crate::ColumnSelector::Column { name: self.3.to_string(), alias: None },
+            crate::ColumnSelector::Column { name: self.4.to_string(), alias: None },
         ]
     }
 }
@@ -431,14 +437,14 @@ impl IntoColumnSelectors for (&str, &str, &str, &str, &str) {
 // Support mixed tuples with ColumnSelectors
 impl IntoColumnSelectors for (&str, crate::ColumnSelector) {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
-        vec![crate::ColumnSelector::Column(self.0.to_string()), self.1]
+        vec![crate::ColumnSelector::Column { name: self.0.to_string(), alias: None }, self.1]
     }
 }
 
 impl IntoColumnSelectors for (&str, crate::ColumnSelector, crate::ColumnSelector) {
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
         vec![
-            crate::ColumnSelector::Column(self.0.to_string()),
+            crate::ColumnSelector::Column { name: self.0.to_string(), alias: None },
             self.1,
             self.2,
         ]
@@ -449,7 +455,7 @@ impl IntoColumnSelectors for (crate::ColumnSelector, &str, crate::ColumnSelector
     fn into_column_selectors(self) -> Vec<crate::ColumnSelector> {
         vec![
             self.0,
-            crate::ColumnSelector::Column(self.1.to_string()),
+            crate::ColumnSelector::Column { name: self.1.to_string(), alias: None },
             self.2,
         ]
     }

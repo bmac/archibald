@@ -10,7 +10,10 @@ use crate::{Error, IntoOperator, Result, Value};
 /// Column selector that can be a regular column or an aggregation
 #[derive(Debug, Clone)]
 pub enum ColumnSelector {
-    Column(String),
+    Column {
+        name: String,
+        alias: Option<String>,
+    },
     Aggregate {
         function: AggregateFunction,
         column: String,
@@ -95,9 +98,11 @@ impl ColumnSelector {
     /// Add alias to this column selector
     pub fn as_alias(mut self, alias: &str) -> Self {
         match self {
-            Self::Column(_) => {
-                // For regular columns, we can't easily add an alias to the current enum variant
-                // This would require restructuring the enum. For now, leave as-is
+            Self::Column {
+                alias: ref mut alias_field,
+                ..
+            } => {
+                *alias_field = Some(alias.to_string());
                 self
             }
             Self::Aggregate {
@@ -254,7 +259,7 @@ impl SelectBuilderInitial {
     pub fn select_all(self) -> SelectBuilderComplete {
         SelectBuilderComplete {
             table_name: self.table_name,
-            selected_columns: vec![ColumnSelector::Column("*".to_string())],
+            selected_columns: vec![ColumnSelector::Column { name: "*".to_string(), alias: None }],
             where_conditions: self.where_conditions,
             subquery_conditions: self.subquery_conditions,
             join_clauses: self.join_clauses,
@@ -512,7 +517,7 @@ impl SelectBuilderInitial {
     ///
     /// let query = from("orders")
     ///     .select(vec![
-    ///         ColumnSelector::Column("status".to_string()),
+    ///         ColumnSelector::Column { name: "status".to_string(), alias: None },
     ///         ColumnSelector::count().as_alias("count")
     ///     ])
     ///     .group_by("status")
@@ -963,7 +968,13 @@ impl QueryBuilder for SelectBuilderComplete {
             let mut column_parts = Vec::new();
             for col in &self.selected_columns {
                 let part = match col {
-                    ColumnSelector::Column(name) => name.clone(),
+                    ColumnSelector::Column { name, alias } => {
+                        if let Some(alias) = alias {
+                            format!("{} AS {}", name, alias)
+                        } else {
+                            name.clone()
+                        }
+                    }
                     ColumnSelector::Aggregate {
                         function,
                         column,
@@ -1382,7 +1393,7 @@ mod tests {
     fn test_aggregation_with_group_by() {
         let query = from("orders")
             .select(vec![
-                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::Column { name: "status".to_string(), alias: None },
                 ColumnSelector::count().as_alias("count"),
                 ColumnSelector::avg("total").as_alias("avg_total"),
             ])
@@ -1399,7 +1410,7 @@ mod tests {
     fn test_aggregation_with_joins() {
         let query = from("users")
             .select(vec![
-                ColumnSelector::Column("users.name".to_string()),
+                ColumnSelector::Column { name: "users.name".to_string(), alias: None },
                 ColumnSelector::count().as_alias("order_count"),
             ])
             .left_join("orders", "users.id", "orders.user_id")
@@ -1413,8 +1424,8 @@ mod tests {
     fn test_complex_aggregation_query() {
         let query = from("orders")
             .select(vec![
-                ColumnSelector::Column("customer_id".to_string()),
-                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::Column { name: "customer_id".to_string(), alias: None },
+                ColumnSelector::Column { name: "status".to_string(), alias: None },
                 ColumnSelector::count().as_alias("order_count"),
                 ColumnSelector::sum("total").as_alias("total_sales"),
                 ColumnSelector::avg("total").as_alias("avg_order_value"),
@@ -1604,7 +1615,7 @@ mod tests {
     fn test_having_count_distinct() {
         let query = from("orders")
             .select(vec![
-                ColumnSelector::Column("region".to_string()),
+                ColumnSelector::Column { name: "region".to_string(), alias: None },
                 ColumnSelector::count_distinct("customer_id").as_alias("unique_customers"),
                 ColumnSelector::sum("total").as_alias("total_sales"),
             ])
@@ -1619,7 +1630,7 @@ mod tests {
     fn test_having_with_avg() {
         let query = from("products")
             .select(vec![
-                ColumnSelector::Column("category".to_string()),
+                ColumnSelector::Column { name: "category".to_string(), alias: None },
                 ColumnSelector::avg("price").as_alias("avg_price"),
             ])
             .group_by("category")
@@ -1633,7 +1644,7 @@ mod tests {
     fn test_having_with_joins() {
         let query = from("users")
             .select(vec![
-                ColumnSelector::Column("users.department".to_string()),
+                ColumnSelector::Column { name: "users.department".to_string(), alias: None },
                 ColumnSelector::count().as_alias("user_count"),
                 ColumnSelector::avg("salaries.amount").as_alias("avg_salary"),
             ])
@@ -1649,7 +1660,7 @@ mod tests {
     fn test_having_with_or_condition() {
         let query = from("products")
             .select(vec![
-                ColumnSelector::Column("category".to_string()),
+                ColumnSelector::Column { name: "category".to_string(), alias: None },
                 ColumnSelector::count().as_alias("product_count"),
                 ColumnSelector::avg("price").as_alias("avg_price"),
             ])
@@ -1665,7 +1676,7 @@ mod tests {
     fn test_having_with_order_by() {
         let query = from("products")
             .select(vec![
-                ColumnSelector::Column("category".to_string()),
+                ColumnSelector::Column { name: "category".to_string(), alias: None },
                 ColumnSelector::count().as_alias("product_count"),
                 ColumnSelector::max("price").as_alias("max_price"),
             ])
@@ -1682,7 +1693,7 @@ mod tests {
     fn test_having_with_sum() {
         let query = from("sales")
             .select(vec![
-                ColumnSelector::Column("region".to_string()),
+                ColumnSelector::Column { name: "region".to_string(), alias: None },
                 ColumnSelector::sum("amount").as_alias("total_sales"),
             ])
             .group_by("region")
@@ -1775,7 +1786,7 @@ mod tests {
     #[test]
     fn test_mixed_columns_and_aggregations() {
         let query = from("orders").select(vec![
-            ColumnSelector::Column("status".to_string()),
+            ColumnSelector::Column { name: "status".to_string(), alias: None },
             ColumnSelector::count().as_alias("count"),
             ColumnSelector::sum("total").as_alias("total_sales"),
         ]);
@@ -1791,7 +1802,7 @@ mod tests {
     fn test_having_with_where_and_group_by() {
         let query = from("orders")
             .select(vec![
-                ColumnSelector::Column("status".to_string()),
+                ColumnSelector::Column { name: "status".to_string(), alias: None },
                 ColumnSelector::count().as_alias("count"),
                 ColumnSelector::sum("total").as_alias("total_sales"),
             ])
@@ -1807,7 +1818,7 @@ mod tests {
     fn test_multiple_having_conditions() {
         let query = from("orders")
             .select(vec![
-                ColumnSelector::Column("customer_id".to_string()),
+                ColumnSelector::Column { name: "customer_id".to_string(), alias: None },
                 ColumnSelector::count().as_alias("order_count"),
                 ColumnSelector::sum("total").as_alias("total_spent"),
             ])
@@ -1866,7 +1877,7 @@ mod tests {
             .group_by("orders.customer_id");
 
         let query = from("customers").select(vec![
-            ColumnSelector::Column("name".to_string()),
+            ColumnSelector::Column { name: "name".to_string(), alias: None },
             ColumnSelector::subquery_as(subquery, "total_items_ordered"),
         ]);
 
@@ -1897,7 +1908,7 @@ mod tests {
             .limit(1);
 
         let query = from("customers").select(vec![
-            ColumnSelector::Column("name".to_string()),
+            ColumnSelector::Column { name: "name".to_string(), alias: None },
             ColumnSelector::subquery_as(subquery, "latest_order_total"),
         ]);
 
@@ -1944,7 +1955,7 @@ mod tests {
             from("orders").select(ColumnSelector::avg("total").as_alias("avg_total"));
 
         let query = from("customers").select(vec![
-            ColumnSelector::Column("name".to_string()),
+            ColumnSelector::Column { name: "name".to_string(), alias: None },
             ColumnSelector::subquery_as(avg_subquery, "avg_order_total"),
         ]);
 
@@ -1982,6 +1993,17 @@ mod tests {
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE id IN (SELECT order_id FROM order_items WHERE product_id = ?))");
+    }
+
+
+    #[test]
+    fn test_column_alias() {
+        let query = from("order_items")
+            .select(ColumnSelector::Column { name: "order_id".to_string(), alias: None }.as_alias("id"))
+            .limit(10);
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT order_id AS id FROM order_items LIMIT 10");
     }
 
     #[test]
