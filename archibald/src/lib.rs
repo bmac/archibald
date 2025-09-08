@@ -46,3 +46,17 @@ pub fn delete(name: &str) -> DeleteBuilderInitial {
 pub fn insert(name: &str) -> InsertBuilderInitial {
     builder::InsertBuilderInitial::new(name)
 }
+
+/// Create a column selector for aliasing
+/// 
+/// # Examples
+/// 
+/// ```
+/// use archibald::col;
+/// 
+/// // Create a column that can be aliased
+/// let aliased_column = col("order_id").as_alias("id");
+/// ```
+pub fn col(name: &str) -> ColumnSelector {
+    ColumnSelector::column(name)
+}

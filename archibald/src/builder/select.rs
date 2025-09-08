@@ -29,6 +29,14 @@ pub enum ColumnSelector {
 }
 
 impl ColumnSelector {
+    /// Create a regular column selector
+    pub fn column(name: &str) -> Self {
+        Self::Column {
+            name: name.to_string(),
+            alias: None,
+        }
+    }
+
     /// Create a COUNT(*) selector
     pub fn count() -> Self {
         Self::CountAll { alias: None }
@@ -1999,11 +2007,23 @@ mod tests {
     #[test]
     fn test_column_alias() {
         let query = from("order_items")
-            .select(ColumnSelector::Column { name: "order_id".to_string(), alias: None }.as_alias("id"))
+            .select(ColumnSelector::column("order_id").as_alias("id"))
             .limit(10);
 
         let sql = query.to_sql().unwrap();
         assert_eq!(sql, "SELECT order_id AS id FROM order_items LIMIT 10");
+    }
+
+    #[test]
+    fn test_column_alias_with_col_function() {
+        use crate::col;
+        
+        let query = from("products")
+            .select(col("product_name").as_alias("name"))
+            .where_(("active", true));
+
+        let sql = query.to_sql().unwrap();
+        assert_eq!(sql, "SELECT product_name AS name FROM products WHERE active = ?");
     }
 
     #[test]
