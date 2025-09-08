@@ -5,7 +5,7 @@ edition = "2024"
 description = "A knex inspired SQL query builder for Rust"
 license = "MIT"
 repository = "https://github.com/bmac/archibald"
-keywords = ["knex", "query builder", "SQL", "PostgreSQL", "SQLite"]
+keywords = ["knex", "query-builder", "querybuilder", "SQL", "PostgreSQL", "SQLite"]
 readme = "../README.md"
 
 [dependencies]
